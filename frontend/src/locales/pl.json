@@ -64,7 +64,7 @@
     "archiveConfirmDescription": "Obszar roboczy „{{name}}” zostanie usunięty z listy. Dane zostają zachowane, a administrator może go później przywrócić."
   },
   "app": {
-    "name": "Securo",
+    "name": "Miza",
     "versionAriaLabel": "Działa wersja {{version}}",
     "versionLabel": "Wersja {{version}}",
     "updateAvailable": "Dostępna aktualizacja",
@@ -247,7 +247,7 @@
       "presetTracking": "Track payments",
       "presetDocument": "Issue documents",
       "presetTrackingHint": "Fakturujesz gdzie indziej. Tutaj śledzisz, kto ci zalega i czy pieniądze dotarły.",
-      "presetDocumentHint": "Securo pisze fakturę, którą dostaje klient. Potrzebuje tego, za co wystawiasz rachunek.",
+      "presetDocumentHint": "Miza pisze fakturę, którą dostaje klient. Potrzebuje tego, za co wystawiasz rachunek.",
       "numberPrefix": "Number prefix",
       "paymentTerms": "Payment terms (days)",
       "issuerName": "Your business name",
@@ -426,7 +426,7 @@
       "notOurs": "Dokument został wystawiony gdzie indziej",
       "notOursHint": "Dołącz otrzymany plik, a zostanie pokazany tutaj dokładnie w takiej postaci, w jakiej dotarł.",
       "ourPage": "Faktura",
-      "rendered": "Wygenerowana przez Securo · {{date}}",
+      "rendered": "Wygenerowana przez Miza · {{date}}",
       "kindLabel": "Typ dokumentu",
       "fromSystem": "Z {{source}} · {{date}}",
       "fromUpload": "Przesłano · {{date}}"
@@ -800,9 +800,9 @@
     "passkeysCleanupDescription": "Logowanie lokalne jest wyłączone. Możesz usuwać zapisane klucze dostępu, ale nie możesz dodawać nowych.",
     "passkeyLoadError": "Nie udało się załadować kluczy dostępu",
     "passkeyUnsupported": "Ta przeglądarka nie obsługuje kluczy dostępu.",
-    "passkeyInsecureContext": "Klucze dostępu wymagają bezpiecznego połączenia. Otwórz Securo przez HTTPS lub na http://localhost.",
-    "passkeyIpAddress": "Klucze dostępu nie działają pod adresem IP. Otwórz Securo w domenie przez HTTPS lub na http://localhost.",
-    "passkeyDomainError": "Przeglądarka odrzuciła tę domenę dla kluczy dostępu. Otwórz Securo w skonfigurowanej domenie przez HTTPS.",
+    "passkeyInsecureContext": "Klucze dostępu wymagają bezpiecznego połączenia. Otwórz Miza przez HTTPS lub na http://localhost.",
+    "passkeyIpAddress": "Klucze dostępu nie działają pod adresem IP. Otwórz Miza w domenie przez HTTPS lub na http://localhost.",
+    "passkeyDomainError": "Przeglądarka odrzuciła tę domenę dla kluczy dostępu. Otwórz Miza w skonfigurowanej domenie przez HTTPS.",
     "passkeyDomainMismatch": "Ten adres jest poza domeną kluczy dostępu skonfigurowaną na serwerze (WEBAUTHN_RP_ID).",
     "passkeyDuplicate": "To urządzenie ma już klucz dostępu do Twojego konta.",
     "passkeyWaiting": "Oczekiwanie na urządzenie...",
@@ -1399,7 +1399,7 @@
       "openBridge": "Wygeneruj token w SimpleFIN Bridge",
       "tokenLabel": "Token konfiguracyjny",
       "tokenPlaceholder": "Wklej otrzymany token…",
-      "tokenHelp": "Token konfiguracyjny jest jednorazowy. Securo pobiera z niego prywatny adres URL dostępu i przechowuje go w postaci zaszyfrowanej.",
+      "tokenHelp": "Token konfiguracyjny jest jednorazowy. Miza pobiera z niego prywatny adres URL dostępu i przechowuje go w postaci zaszyfrowanej.",
       "connect": "Połącz",
       "connecting": "Łączenie…",
       "simplefin": {
@@ -1460,7 +1460,7 @@
     "colBalance": "Pozostało",
     "adjustAction": "Zaktualizuj saldo",
     "adjustTitle": "Zaktualizuj pozostały dług",
-    "adjustHint": "Wpisz saldo podane przez kredytodawcę. Securo zapisze różnicę jako jedną transakcję na tej pożyczce, aby umowy indeksowane lub renegocjowane zgadzały się z bankiem.",
+    "adjustHint": "Wpisz saldo podane przez kredytodawcę. Miza zapisze różnicę jako jedną transakcję na tej pożyczce, aby umowy indeksowane lub renegocjowane zgadzały się z bankiem.",
     "adjustBalance": "Pozostały dług",
     "adjustDate": "Data wyciągu",
     "adjustDescription": "Opis",
@@ -1488,7 +1488,7 @@
     "syncAssets": "Importuj aktywa inwestycyjne",
     "syncAssetsHint": "Gdy wyłączone, to połączenie synchronizuje konta i transakcje, ale nie zmienia inwestycji dostawcy.",
     "initialSyncSettings": "Opcje synchronizacji",
-    "initialSyncSettingsDesc": "Wybierz, co Securo ma zaimportować przed otwarciem konektora.",
+    "initialSyncSettingsDesc": "Wybierz, co Miza ma zaimportować przed otwarciem konektora.",
     "continueToConnector": "Przejdź do konektora"
   },
   "settings": {
@@ -1668,7 +1668,7 @@
     "priceChangeAmount": "{{old}} → {{new}}",
     "priceChangeDelta": "{{absolute}} ({{percent}})",
     "priceChangeGap": "Po przerwie wynoszącej {{days}} dni",
-    "priceChangeInsufficient": "Przed zgłoszeniem stabilnej zmiany ceny przez Securo potrzebne są co najmniej 3 powiązane zaksięgowane obciążenia."
+    "priceChangeInsufficient": "Przed zgłoszeniem stabilnej zmiany ceny przez Miza potrzebne są co najmniej 3 powiązane zaksięgowane obciążenia."
   },
   "rules": {
     "searchPlaceholder": "Szukaj reguł...",
@@ -1980,9 +1980,9 @@
     "outflowColumn": "Kolumna wypływów",
     "selectColumn": "Wybierz kolumnę...",
     "columnMapping": "Mapowanie kolumn",
-    "columnMappingHint": "Przypisz kolumny CSV do pól Securo. Zostaw na automatycznym wykrywaniu, aby zachować wykrytą kolumnę.",
+    "columnMappingHint": "Przypisz kolumny CSV do pól Miza. Zostaw na automatycznym wykrywaniu, aby zachować wykrytą kolumnę.",
     "columnAutoDetect": "Wykryj automatycznie",
-    "mappingNeeded": "Nie udało się automatycznie rozpoznać kolumn CSV. Przypisz je poniżej do pól Securo, aby kontynuować.",
+    "mappingNeeded": "Nie udało się automatycznie rozpoznać kolumn CSV. Przypisz je poniżej do pól Miza, aby kontynuować.",
     "failedRowsWarning": "Nie udało się przeanalizować {{count}} wierszy w tym pliku (zostały pominięte).",
     "viewDetails": "Pokaż szczegóły",
     "failedRowsTitle": "Nieprzeanalizowane wiersze CSV",
@@ -2593,11 +2593,11 @@
     "you": "Ty",
     "memberName": "Nazwa",
     "memberEmail": "E-mail",
-    "memberEmailHint": "Opcjonalnie — przydatne, jeśli później zaprosisz tę osobę jako użytkownika Securo.",
-    "linkedUser": "Powiązany użytkownik Securo",
+    "memberEmailHint": "Opcjonalnie — przydatne, jeśli później zaprosisz tę osobę jako użytkownika Miza.",
+    "linkedUser": "Powiązany użytkownik Miza",
     "linkedUserNone": "— Niepowiązany (osoba spoza systemu) —",
-    "linkedUserHint": "Wybierz istniejącego użytkownika Securo, aby powiązać członka, lub zostaw bez powiązania, aby dodać osobę spoza systemu (np. kogoś, kto nie ma jeszcze konta).",
-    "willLinkToUser": "Zostanie powiązany z istniejącym użytkownikiem Securo {{email}}",
+    "linkedUserHint": "Wybierz istniejącego użytkownika Miza, aby powiązać członka, lub zostaw bez powiązania, aby dodać osobę spoza systemu (np. kogoś, kto nie ma jeszcze konta).",
+    "willLinkToUser": "Zostanie powiązany z istniejącym użytkownikiem Miza {{email}}",
     "sharedWithYou": "Udostępnione Tobie",
     "sharedRowBadge": "Udostępnione · {{group}}",
     "sharedRowBadgeAuthor": "{{author}} · {{group}}",
@@ -2680,7 +2680,7 @@
     "show": "Pokaż wartości"
   },
   "setup": {
-    "title": "Witaj w Securo",
+    "title": "Witaj w Miza",
     "description": "Utwórz konto administratora, aby rozpocząć.",
     "confirmPassword": "Potwierdź hasło",
     "createAdmin": "Utwórz konto administratora",
@@ -2708,14 +2708,14 @@
     "passwordLabel": "Hasło (opcjonalne)",
     "passwordPlaceholder": "Zostaw puste, aby pobrać kopię bez szyfrowania",
     "passwordTooShort": "Użyj co najmniej {{min}} znaków",
-    "encryptionNote": "Archiwum jest szyfrowane AES-256 i otwiera się w dowolnym programie do archiwów. Securo nie przechowuje tego hasła i bez niego nie odzyska pliku.",
+    "encryptionNote": "Archiwum jest szyfrowane AES-256 i otwiera się w dowolnym programie do archiwów. Miza nie przechowuje tego hasła i bez niego nie odzyska pliku.",
     "successEncrypted": "Pomyślnie pobrano zaszyfrowaną kopię zapasową"
   },
   "update": {
     "title": "Aktualizacja serwera",
     "runningLabel": "działa",
     "newVersionAvailable": "Dostępna nowa wersja:",
-    "description": "Dostępna jest nowa wersja Securo. Rozważ aktualizację, jeśli:",
+    "description": "Dostępna jest nowa wersja Miza. Rozważ aktualizację, jeśli:",
     "reasonFeatures": "Chcesz korzystać z najnowszych funkcji i usprawnień",
     "reasonBugs": "Napotykasz problemy, które mogą być rozwiązane w nowej wersji",
     "releaseNotesHintBefore": "Zalecamy zapoznanie się z",
@@ -2842,7 +2842,7 @@
       }
     },
     "title": "Agenci",
-    "subtitle": "Twórz konwersacyjnych asystentów na bazie swoich danych w Securo. Każdy agent może mieć własną bazę wiedzy, narzędzia i dostawcę.",
+    "subtitle": "Twórz konwersacyjnych asystentów na bazie swoich danych w Miza. Każdy agent może mieć własną bazę wiedzy, narzędzia i dostawcę.",
     "newAgent": "Nowy agent",
     "loading": "Wczytywanie…",
     "instanceDefault": "domyślny dla instancji",
@@ -3060,7 +3060,7 @@
       "optional": "opcjonalnie",
       "empty": {
         "title": "Brak połączeń",
-        "subtitle": "Dodaj połączenie, aby skierować Securo do swojego lokalnego Ollamy, OpenAI, Anthropic lub dowolnego endpointu zgodnego z OpenAI."
+        "subtitle": "Dodaj połączenie, aby skierować Miza do swojego lokalnego Ollamy, OpenAI, Anthropic lub dowolnego endpointu zgodnego z OpenAI."
       }
     },
     "newConversation": "Nowa rozmowa",
@@ -3081,14 +3081,14 @@
     },
     "mcpExternal": {
       "title": "Zewnętrzny dostęp MCP",
-      "subtitle": "Podłącz zewnętrznego agenta (Claude Desktop, ChatGPT, n8n, własnego klienta) do wbudowanego serwera MCP Securo. Poniższy token jest przypisany do Twojego użytkownika i wygasa za {{days}} dni.",
+      "subtitle": "Podłącz zewnętrznego agenta (Claude Desktop, ChatGPT, n8n, własnego klienta) do wbudowanego serwera MCP Miza. Poniższy token jest przypisany do Twojego użytkownika i wygasa za {{days}} dni.",
       "copy": "Kopiuj",
       "copied": "Skopiowano",
       "copyFailed": "Kopiowanie nie powiodło się",
       "mint": "Generuj token",
       "minting": "Generowanie…",
       "mintFailed": "Nie udało się utworzyć tokenu",
-      "warning": "Skopiuj teraz — Securo nie przechowuje tokenu, więc nie możemy go ponownie wyświetlić. Aby unieważnić, zmień AGENTS_MCP_JWT_SECRET.",
+      "warning": "Skopiuj teraz — Miza nie przechowuje tokenu, więc nie możemy go ponownie wyświetlić. Aby unieważnić, zmień AGENTS_MCP_JWT_SECRET.",
       "regenerate": "Generuj kolejny",
       "snippets": {
         "token": "Token",
@@ -3461,7 +3461,7 @@
     "viewSource": "Zobacz kod źródłowy",
     "revoked": "Unieważniona",
     "unavailable": "Niedostępna",
-    "needsVersion": "Wymaga Securo {{version}}",
+    "needsVersion": "Wymaga Miza {{version}}",
     "updateAvailable": "Dostępna aktualizacja",
     "installed": "Zainstalowana",
     "install": "Zainstaluj",
@@ -3515,11 +3515,11 @@
       "defaults_other": "Tworzy też {{count}} domyślnych kategorii potrzebnych regułom",
       "themes": "Dodaje motywy do biblioteki: {{names}}",
       "themesRemove": "Usuwa te motywy z biblioteki: {{names}}",
-      "themeInUse": "Używasz motywu {{name}}: wrócisz do motywu Securo."
+      "themeInUse": "Używasz motywu {{name}}: wrócisz do motywu Miza."
     },
     "page": {
       "section": "Katalog",
-      "notice": "Wtyczki nie są sprawdzane przez Securo. Zanim cokolwiek zostanie zastosowane, widzisz dokładnie, co się zmieni, a nic nie opuszcza Twojego serwera.",
+      "notice": "Wtyczki nie są sprawdzane przez Miza. Zanim cokolwiek zostanie zastosowane, widzisz dokładnie, co się zmieni, a nic nie opuszcza Twojego serwera.",
       "search": "Szukaj wtyczek",
       "type": {
         "data": "Dane",
@@ -3596,7 +3596,7 @@
       "insideHint": "Wszystko, co ta wtyczka dodaje do przestrzeni. Przy instalacji zobaczysz, co już masz.",
       "noReadme": "Autor nie napisał jeszcze README dla tej wtyczki.",
       "loadFailed": "Nie udało się wczytać szczegółów wtyczki.",
-      "contentsUnavailable": "Ta wersja Securo nie potrafi wyświetlić zawartości tej wtyczki.",
+      "contentsUnavailable": "Ta wersja Miza nie potrafi wyświetlić zawartości tej wtyczki.",
       "version": "Wersja",
       "license": "Licencja",
       "requires": "Wymaga",
@@ -3620,7 +3620,7 @@
       "remove": "Żaden jej element tu nie został; usunięcie tylko zdejmuje ją z listy."
     },
     "code": {
-      "runsCode": "Ta wtyczka uruchamia kod na Twoim serwerze, odizolowany od Securo i Twoich danych. Securo nie weryfikuje wtyczek: instaluj tylko kod, któremu ufasz.",
+      "runsCode": "Ta wtyczka uruchamia kod na Twoim serwerze, odizolowany od Miza i Twoich danych. Miza nie weryfikuje wtyczek: instaluj tylko kod, któremu ufasz.",
       "network": "Łączy się z",
       "noNetwork": "Niczym: żadne dane nie opuszczają Twojego serwera.",
       "access": "Używa w tym obszarze roboczym",
@@ -3657,7 +3657,7 @@
         "remove": "Jej kod przestaje działać w tym obszarze roboczym."
       },
       "provides": "Synchronizuje jak połączony bank",
-      "providesHint": "Securo dodaje te dane do tego obszaru roboczego i aktualizuje je, jak w przypadku połączonego banku. Każde połączenie pojawia się w sekcji „Połączenia bankowe”.",
+      "providesHint": "Miza dodaje te dane do tego obszaru roboczego i aktualizuje je, jak w przypadku połączonego banku. Każde połączenie pojawia się w sekcji „Połączenia bankowe”.",
       "kinds": {
         "accounts": "Konta",
         "transactions": "transakcje",
@@ -3711,7 +3711,7 @@
     },
     "oauth": {
       "title": "Kończenie logowania",
-      "wait": "Securo zapisuje połączenie. To chwilę potrwa.",
+      "wait": "Miza zapisuje połączenie. To chwilę potrwa.",
       "connected": "Połączono: {{name}}",
       "failed": "Nie udało się dokończyć logowania. Spróbuj ponownie.",
       "missing": "Usługa nie zwróciła logowania. Spróbuj ponownie.",
@@ -3722,7 +3722,7 @@
   },
   "library": {
     "title": "Biblioteka",
-    "subtitle": "Wybierz, co pokazują pulpit i raporty oraz jak wygląda Securo.",
+    "subtitle": "Wybierz, co pokazują pulpit i raporty oraz jak wygląda Miza.",
     "kind": {
       "widgets": "Widżety",
       "reports": "Raporty",
@@ -3746,7 +3746,7 @@
     "remove": "Usuń",
     "add": "Dodaj",
     "theme": {
-      "securo": "Securo",
+      "Miza": "Miza",
       "ocean": "Ocean",
       "forest": "Las",
       "sunset": "Zachód słońca",

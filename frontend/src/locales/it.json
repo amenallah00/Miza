@@ -64,7 +64,7 @@
     "archiveConfirmDescription": "L'area di lavoro \"{{name}}\" sarà rimossa dal tuo elenco. I dati vengono conservati e un amministratore potrà ripristinarla in seguito."
   },
   "app": {
-    "name": "Securo",
+    "name": "Miza",
     "versionAriaLabel": "Versione in esecuzione {{version}}",
     "versionLabel": "Versione {{version}}",
     "updateAvailable": "Aggiornamento disponibile",
@@ -247,7 +247,7 @@
       "presetTracking": "Track payments",
       "presetDocument": "Issue documents",
       "presetTrackingHint": "Fatturi altrove. Qui segui chi ti deve e se il denaro è arrivato.",
-      "presetDocumentHint": "Securo scrive la fattura che il cliente riceve. Gli serve sapere cosa stai fatturando.",
+      "presetDocumentHint": "Miza scrive la fattura che il cliente riceve. Gli serve sapere cosa stai fatturando.",
       "numberPrefix": "Number prefix",
       "paymentTerms": "Payment terms (days)",
       "issuerName": "Your business name",
@@ -426,7 +426,7 @@
       "notOurs": "Il documento è stato emesso altrove",
       "notOursHint": "Allega il file che hai ricevuto e verrà mostrato qui, esattamente come è arrivato.",
       "ourPage": "Fattura",
-      "rendered": "Generata da Securo · {{date}}",
+      "rendered": "Generata da Miza · {{date}}",
       "kindLabel": "Tipo di documento",
       "fromSystem": "Da {{source}} · {{date}}",
       "fromUpload": "Caricato · {{date}}"
@@ -794,9 +794,9 @@
     "passkeysCleanupDescription": "L’accesso locale è disattivato. Puoi rimuovere le passkey salvate, ma non aggiungerne di nuove.",
     "passkeyLoadError": "Impossibile caricare le passkey",
     "passkeyUnsupported": "Questo browser non supporta le passkey.",
-    "passkeyInsecureContext": "Le passkey richiedono una connessione sicura. Apri Securo tramite HTTPS o su http://localhost.",
-    "passkeyIpAddress": "Le passkey non funzionano con un indirizzo IP. Apri Securo su un dominio tramite HTTPS o su http://localhost.",
-    "passkeyDomainError": "Il browser ha rifiutato questo dominio per le passkey. Apri Securo sul dominio configurato, tramite HTTPS.",
+    "passkeyInsecureContext": "Le passkey richiedono una connessione sicura. Apri Miza tramite HTTPS o su http://localhost.",
+    "passkeyIpAddress": "Le passkey non funzionano con un indirizzo IP. Apri Miza su un dominio tramite HTTPS o su http://localhost.",
+    "passkeyDomainError": "Il browser ha rifiutato questo dominio per le passkey. Apri Miza sul dominio configurato, tramite HTTPS.",
     "passkeyDomainMismatch": "Questo indirizzo è fuori dal dominio delle passkey configurato sul server (WEBAUTHN_RP_ID).",
     "passkeyDuplicate": "Questo dispositivo ha già una passkey per il tuo account.",
     "passkeyWaiting": "In attesa del dispositivo...",
@@ -1350,7 +1350,7 @@
       "openBridge": "Genera token su SimpleFIN Bridge",
       "tokenLabel": "Token di configurazione",
       "tokenPlaceholder": "Incolla il token che hai ricevuto…",
-      "tokenHelp": "Il token di configurazione è monouso. Securo ne ricava un URL di accesso privato e lo memorizza cifrato.",
+      "tokenHelp": "Il token di configurazione è monouso. Miza ne ricava un URL di accesso privato e lo memorizza cifrato.",
       "connect": "Collega",
       "connecting": "Connessione…",
       "simplefin": {
@@ -1411,7 +1411,7 @@
     "colBalance": "Debito residuo",
     "adjustAction": "Aggiorna saldo",
     "adjustTitle": "Aggiorna il debito residuo",
-    "adjustHint": "Inserisci il saldo indicato dal finanziatore. Securo registra la differenza come una transazione su questo prestito, così i contratti indicizzati o rinegoziati restano allineati alla banca.",
+    "adjustHint": "Inserisci il saldo indicato dal finanziatore. Miza registra la differenza come una transazione su questo prestito, così i contratti indicizzati o rinegoziati restano allineati alla banca.",
     "adjustBalance": "Debito residuo",
     "adjustDate": "Data dell'estratto",
     "adjustDescription": "Descrizione",
@@ -1439,7 +1439,7 @@
     "syncAssets": "Importa asset di investimento",
     "syncAssetsHint": "Se disattivato, questa connessione sincronizza conti e transazioni ma lascia invariati gli investimenti del provider.",
     "initialSyncSettings": "Opzioni di sincronizzazione",
-    "initialSyncSettingsDesc": "Scegli cosa deve importare Securo prima di aprire il connettore.",
+    "initialSyncSettingsDesc": "Scegli cosa deve importare Miza prima di aprire il connettore.",
     "continueToConnector": "Continua al connettore"
   },
   "settings": {
@@ -1610,7 +1610,7 @@
     "priceChangeAmount": "{{old}} → {{new}}",
     "priceChangeDelta": "{{absolute}} ({{percent}})",
     "priceChangeGap": "Dopo un intervallo di {{days}} giorni",
-    "priceChangeInsufficient": "Sono necessari almeno 3 addebiti pubblicati e collegati prima che Securo segnali una variazione di prezzo stabile."
+    "priceChangeInsufficient": "Sono necessari almeno 3 addebiti pubblicati e collegati prima che Miza segnali una variazione di prezzo stabile."
   },
   "rules": {
     "searchPlaceholder": "Cerca regole...",
@@ -1905,9 +1905,9 @@
     "outflowColumn": "Colonna uscite",
     "selectColumn": "Seleziona colonna...",
     "columnMapping": "Mappatura colonne",
-    "columnMappingHint": "Associa le colonne del tuo CSV ai campi di Securo. Lascia su rilevamento automatico per mantenere la colonna rilevata.",
+    "columnMappingHint": "Associa le colonne del tuo CSV ai campi di Miza. Lascia su rilevamento automatico per mantenere la colonna rilevata.",
     "columnAutoDetect": "Rilevamento automatico",
-    "mappingNeeded": "Non siamo riusciti a riconoscere automaticamente le colonne del tuo CSV. Associale ai campi di Securo qui sotto per continuare.",
+    "mappingNeeded": "Non siamo riusciti a riconoscere automaticamente le colonne del tuo CSV. Associale ai campi di Miza qui sotto per continuare.",
     "failedRowsWarning": "{{count}} riga/he in questo file non è stato possibile analizzare e sono state saltate.",
     "viewDetails": "Visualizza dettagli",
     "failedRowsTitle": "Righe CSV non analizzate",
@@ -2488,11 +2488,11 @@
     "you": "tu",
     "memberName": "Nome",
     "memberEmail": "Email",
-    "memberEmailHint": "Facoltativo — utile se in seguito lo inviti come utente Securo.",
-    "linkedUser": "Utente Securo collegato",
+    "memberEmailHint": "Facoltativo — utile se in seguito lo inviti come utente Miza.",
+    "linkedUser": "Utente Miza collegato",
     "linkedUserNone": "— Non collegato (non utente) —",
-    "linkedUserHint": "Scegli un utente Securo esistente per collegare il membro, oppure lascialo non collegato per aggiungere un non utente (es. qualcuno che non ha ancora un account).",
-    "willLinkToUser": "Verrà collegato all'utente Securo esistente {{email}}",
+    "linkedUserHint": "Scegli un utente Miza esistente per collegare il membro, oppure lascialo non collegato per aggiungere un non utente (es. qualcuno che non ha ancora un account).",
+    "willLinkToUser": "Verrà collegato all'utente Miza esistente {{email}}",
     "sharedWithYou": "Condiviso con te",
     "sharedRowBadge": "Condiviso · {{group}}",
     "sharedRowBadgeAuthor": "{{author}} · {{group}}",
@@ -2572,7 +2572,7 @@
     "show": "Mostra valori"
   },
   "setup": {
-    "title": "Benvenuto in Securo",
+    "title": "Benvenuto in Miza",
     "description": "Crea il tuo account amministratore per iniziare.",
     "confirmPassword": "Conferma password",
     "createAdmin": "Crea account amministratore",
@@ -2600,14 +2600,14 @@
     "passwordLabel": "Password (facoltativa)",
     "passwordPlaceholder": "Lascia vuoto per un backup non cifrato",
     "passwordTooShort": "Usa almeno {{min}} caratteri",
-    "encryptionNote": "L'archivio è cifrato con AES-256 e si apre con qualsiasi programma di compressione. Securo non conserva questa password e non può recuperare il file senza di essa.",
+    "encryptionNote": "L'archivio è cifrato con AES-256 e si apre con qualsiasi programma di compressione. Miza non conserva questa password e non può recuperare il file senza di essa.",
     "successEncrypted": "Backup cifrato scaricato con successo"
   },
   "update": {
     "title": "Aggiornamento del server",
     "runningLabel": "in esecuzione",
     "newVersionAvailable": "Nuova versione disponibile:",
-    "description": "È disponibile una nuova versione di Securo. Valuta l'aggiornamento se:",
+    "description": "È disponibile una nuova versione di Miza. Valuta l'aggiornamento se:",
     "reasonFeatures": "Vuoi accedere alle ultime funzionalità e migliorie",
     "reasonBugs": "Stai riscontrando problemi che potrebbero essere risolti nella nuova versione",
     "releaseNotesHintBefore": "Ti consigliamo di consultare le",
@@ -2734,7 +2734,7 @@
       }
     },
     "title": "Agenti",
-    "subtitle": "Crea assistenti conversazionali basati sui tuoi dati Securo. Ogni agente può avere la propria knowledge base, i propri strumenti e il proprio provider.",
+    "subtitle": "Crea assistenti conversazionali basati sui tuoi dati Miza. Ogni agente può avere la propria knowledge base, i propri strumenti e il proprio provider.",
     "newAgent": "Nuovo agente",
     "loading": "Caricamento…",
     "instanceDefault": "predefinito dell'istanza",
@@ -2946,7 +2946,7 @@
       "optional": "facoltativo",
       "empty": {
         "title": "Ancora nessuna connessione",
-        "subtitle": "Aggiungi una connessione per puntare Securo al tuo Ollama locale, OpenAI, Anthropic o qualsiasi endpoint compatibile con OpenAI."
+        "subtitle": "Aggiungi una connessione per puntare Miza al tuo Ollama locale, OpenAI, Anthropic o qualsiasi endpoint compatibile con OpenAI."
       }
     },
     "newConversation": "Nuova conversazione",
@@ -2967,14 +2967,14 @@
     },
     "mcpExternal": {
       "title": "Accesso MCP esterno",
-      "subtitle": "Collega un agente esterno (Claude Desktop, ChatGPT, n8n, un client personalizzato) al server MCP integrato di Securo. Il token qui sotto è limitato al tuo utente e scade tra {{days}} giorni.",
+      "subtitle": "Collega un agente esterno (Claude Desktop, ChatGPT, n8n, un client personalizzato) al server MCP integrato di Miza. Il token qui sotto è limitato al tuo utente e scade tra {{days}} giorni.",
       "copy": "Copia",
       "copied": "Copiato",
       "copyFailed": "Copia non riuscita",
       "mint": "Genera token",
       "minting": "Generazione…",
       "mintFailed": "Impossibile generare il token",
-      "warning": "Copialo ora: Securo non memorizza il token, quindi non potremo più mostrarlo. Per revocarlo, ruota AGENTS_MCP_JWT_SECRET.",
+      "warning": "Copialo ora: Miza non memorizza il token, quindi non potremo più mostrarlo. Per revocarlo, ruota AGENTS_MCP_JWT_SECRET.",
       "regenerate": "Genera un altro",
       "snippets": {
         "token": "Token",
@@ -3343,7 +3343,7 @@
     "viewSource": "Vedi sorgente",
     "revoked": "Revocato",
     "unavailable": "Non disponibile",
-    "needsVersion": "Richiede Securo {{version}}",
+    "needsVersion": "Richiede Miza {{version}}",
     "updateAvailable": "Aggiornamento disponibile",
     "installed": "Installato",
     "install": "Installa",
@@ -3389,11 +3389,11 @@
       "defaults_other": "Crea anche {{count}} categorie predefinite usate dalle regole",
       "themes": "Aggiunge temi alla libreria: {{names}}",
       "themesRemove": "Toglie questi temi dalla libreria: {{names}}",
-      "themeInUse": "Stai usando {{name}}: tornerai al tema di Securo."
+      "themeInUse": "Stai usando {{name}}: tornerai al tema di Miza."
     },
     "page": {
       "section": "Catalogo",
-      "notice": "I plugin non sono revisionati da Securo. Prima di applicare vedi esattamente cosa cambia, e nulla lascia il tuo server.",
+      "notice": "I plugin non sono revisionati da Miza. Prima di applicare vedi esattamente cosa cambia, e nulla lascia il tuo server.",
       "search": "Cerca plugin",
       "type": {
         "data": "Dati",
@@ -3464,7 +3464,7 @@
       "insideHint": "Tutto ciò che questo plugin aggiunge a uno spazio. All'installazione vedi cosa hai già.",
       "noReadme": "L'autore non ha ancora scritto un README per questo plugin.",
       "loadFailed": "Impossibile caricare i dettagli del plugin.",
-      "contentsUnavailable": "Questa versione di Securo non può elencare il contenuto di questo plugin.",
+      "contentsUnavailable": "Questa versione di Miza non può elencare il contenuto di questo plugin.",
       "version": "Versione",
       "license": "Licenza",
       "requires": "Richiede",
@@ -3488,7 +3488,7 @@
       "remove": "Nessuno dei suoi elementi è rimasto qui; rimuoverlo lo toglie solo dall'elenco."
     },
     "code": {
-      "runsCode": "Questo plugin esegue codice sul tuo server, isolato da Securo e dai tuoi dati. I plugin non sono verificati da Securo: installa solo codice di cui ti fidi.",
+      "runsCode": "Questo plugin esegue codice sul tuo server, isolato da Miza e dai tuoi dati. I plugin non sono verificati da Miza: installa solo codice di cui ti fidi.",
       "network": "Raggiunge",
       "noNetwork": "Niente: nessun dato lascia il tuo server.",
       "access": "Usa in questo spazio di lavoro",
@@ -3525,7 +3525,7 @@
         "remove": "Il suo codice smette di essere eseguito in questo spazio di lavoro."
       },
       "provides": "Si sincronizza come una banca collegata",
-      "providesHint": "Securo aggiunge questi dati a questo spazio di lavoro e li tiene aggiornati, come per una banca collegata. Ogni connessione compare in Connessioni bancarie.",
+      "providesHint": "Miza aggiunge questi dati a questo spazio di lavoro e li tiene aggiornati, come per una banca collegata. Ogni connessione compare in Connessioni bancarie.",
       "kinds": {
         "accounts": "Conti",
         "transactions": "transazioni",
@@ -3579,7 +3579,7 @@
     },
     "oauth": {
       "title": "Completamento dell'accesso",
-      "wait": "Securo sta salvando la connessione. Ci vuole un attimo.",
+      "wait": "Miza sta salvando la connessione. Ci vuole un attimo.",
       "connected": "{{name}} connessa",
       "failed": "Impossibile completare l'accesso. Riprova.",
       "missing": "Il servizio non ha restituito l'accesso. Riprova.",
@@ -3590,7 +3590,7 @@
   },
   "library": {
     "title": "Libreria",
-    "subtitle": "Scegli cosa mostrano la dashboard e i report, e l'aspetto di Securo.",
+    "subtitle": "Scegli cosa mostrano la dashboard e i report, e l'aspetto di Miza.",
     "kind": {
       "widgets": "Widget",
       "reports": "Report",
@@ -3614,7 +3614,7 @@
     "remove": "Rimuovi",
     "add": "Aggiungi",
     "theme": {
-      "securo": "Securo",
+      "Miza": "Miza",
       "ocean": "Oceano",
       "forest": "Foresta",
       "sunset": "Tramonto",

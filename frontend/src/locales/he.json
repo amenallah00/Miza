@@ -64,7 +64,7 @@
     "archiveConfirmDescription": "סביבת העבודה \"{{name}}\" תוסר מהרשימה שלך. הנתונים נשמרים ומנהל מערכת יוכל לשחזר אותה בהמשך."
   },
   "app": {
-    "name": "Securo",
+    "name": "Miza",
     "versionAriaLabel": "גרסה פעילה {{version}}",
     "versionLabel": "גרסה {{version}}",
     "updateAvailable": "עדכון זמין",
@@ -249,7 +249,7 @@
       "presetTracking": "מעקב תשלומים",
       "presetDocument": "הפקת מסמכים",
       "presetTrackingHint": "את החשבוניות מפיקים במקום אחר. כאן עוקבים מי חייב לך והאם הכסף הגיע.",
-      "presetDocumentHint": "Securo מפיק את החשבונית שהלקוח מקבל. לשם כך נדרש פירוט של מה שאתם מחייבים.",
+      "presetDocumentHint": "Miza מפיק את החשבונית שהלקוח מקבל. לשם כך נדרש פירוט של מה שאתם מחייבים.",
       "numberPrefix": "קידומת מספור",
       "paymentTerms": "תנאי תשלום (ימים)",
       "issuerName": "שם העסק שלך",
@@ -428,7 +428,7 @@
       "notOurs": "המסמך הופק במקום אחר",
       "notOursHint": "צרפו את הקובץ שקיבלתם והוא יוצג כאן, בדיוק כפי שהגיע.",
       "ourPage": "חשבונית",
-      "rendered": "הופק על ידי Securo · {{date}}",
+      "rendered": "הופק על ידי Miza · {{date}}",
       "kindLabel": "סוג מסמך",
       "fromSystem": "מ-{{source}} · {{date}}",
       "fromUpload": "הועלה · {{date}}"
@@ -804,9 +804,9 @@
     "passkeysCleanupDescription": "ההתחברות המקומית מושבתת. ניתן להסיר Passkeys שמורים, אך לא להוסיף חדשים.",
     "passkeyLoadError": "לא ניתן לטעון את ה-Passkeys",
     "passkeyUnsupported": "דפדפן זה אינו תומך ב-Passkeys.",
-    "passkeyInsecureContext": "Passkeys דורשים חיבור מאובטח. פתחו את Securo דרך HTTPS, או ב-http://localhost.",
-    "passkeyIpAddress": "Passkeys לא עובדים עם כתובת IP. פתחו את Securo דרך שם דומיין ב-HTTPS, או ב-http://localhost.",
-    "passkeyDomainError": "הדפדפן דחה את הדומיין הזה עבור Passkeys. פתחו את Securo בדומיין שהוגדר עבורו, דרך HTTPS.",
+    "passkeyInsecureContext": "Passkeys דורשים חיבור מאובטח. פתחו את Miza דרך HTTPS, או ב-http://localhost.",
+    "passkeyIpAddress": "Passkeys לא עובדים עם כתובת IP. פתחו את Miza דרך שם דומיין ב-HTTPS, או ב-http://localhost.",
+    "passkeyDomainError": "הדפדפן דחה את הדומיין הזה עבור Passkeys. פתחו את Miza בדומיין שהוגדר עבורו, דרך HTTPS.",
     "passkeyDomainMismatch": "כתובת זו מחוץ לדומיין ה-Passkey שהוגדר בשרת (WEBAUTHN_RP_ID).",
     "passkeyDuplicate": "למכשיר זה כבר יש Passkey לחשבון שלך.",
     "passkeyWaiting": "ממתין למכשיר שלך...",
@@ -1358,7 +1358,7 @@
       "openBridge": "יצירת טוקן ב-SimpleFIN Bridge",
       "tokenLabel": "טוקן הגדרה",
       "tokenPlaceholder": "הדביקו את הטוקן שקיבלתם…",
-      "tokenHelp": "טוקן ההגדרה חד-פעמי. Securo מפיק ממנו כתובת גישה פרטית ושומר אותה מוצפנת.",
+      "tokenHelp": "טוקן ההגדרה חד-פעמי. Miza מפיק ממנו כתובת גישה פרטית ושומר אותה מוצפנת.",
       "connect": "חיבור",
       "connecting": "מתחבר…",
       "simplefin": {
@@ -1419,7 +1419,7 @@
     "colBalance": "יתרה",
     "adjustAction": "עדכון יתרה",
     "adjustTitle": "עדכון יתרת החוב",
-    "adjustHint": "הזינו את מה שהמלווה אומר שאתם חייבים. Securo רושם את ההפרש כתנועה אחת בהלוואה, כך שחוזים צמודים או שעברו מחזור נשארים מתואמים עם המלווה.",
+    "adjustHint": "הזינו את מה שהמלווה אומר שאתם חייבים. Miza רושם את ההפרש כתנועה אחת בהלוואה, כך שחוזים צמודים או שעברו מחזור נשארים מתואמים עם המלווה.",
     "adjustBalance": "יתרת החוב",
     "adjustDate": "תאריך הדוח",
     "adjustDescription": "תיאור",
@@ -1447,7 +1447,7 @@
     "syncAssets": "ייבוא נכסי השקעה",
     "syncAssetsHint": "כשמושבת, החיבור מסנכרן חשבונות ותנועות אך לא נוגע באחזקות ההשקעה של הספק.",
     "initialSyncSettings": "אפשרויות סנכרון",
-    "initialSyncSettingsDesc": "בחרו מה Securo ייבא לפני פתיחת המחבר.",
+    "initialSyncSettingsDesc": "בחרו מה Miza ייבא לפני פתיחת המחבר.",
     "continueToConnector": "המשך למחבר"
   },
   "settings": {
@@ -1618,7 +1618,7 @@
     "priceChangeAmount": "{{old}} ← {{new}}",
     "priceChangeDelta": "{{absolute}} ({{percent}})",
     "priceChangeGap": "אחרי הפסקה של {{days}} ימים",
-    "priceChangeInsufficient": "נדרשים לפחות 3 חיובים תואמים שנרשמו לפני ש-Securo מדווח על שינוי מחיר יציב."
+    "priceChangeInsufficient": "נדרשים לפחות 3 חיובים תואמים שנרשמו לפני ש-Miza מדווח על שינוי מחיר יציב."
   },
   "rules": {
     "searchPlaceholder": "חיפוש כללים...",
@@ -1917,9 +1917,9 @@
     "outflowColumn": "עמודת חובה",
     "selectColumn": "בחירת עמודה...",
     "columnMapping": "מיפוי עמודות",
-    "columnMappingHint": "מפו את עמודות ה-CSV לשדות של Securo. השאירו על זיהוי אוטומטי כדי לשמור על העמודה שזוהתה.",
+    "columnMappingHint": "מפו את עמודות ה-CSV לשדות של Miza. השאירו על זיהוי אוטומטי כדי לשמור על העמודה שזוהתה.",
     "columnAutoDetect": "זיהוי אוטומטי",
-    "mappingNeeded": "לא הצלחנו לזהות אוטומטית את עמודות ה-CSV. מפו אותן לשדות של Securo למטה כדי להמשיך.",
+    "mappingNeeded": "לא הצלחנו לזהות אוטומטית את עמודות ה-CSV. מפו אותן לשדות של Miza למטה כדי להמשיך.",
     "failedRowsWarning": "{{count}} שורות בקובץ לא נקראו ודולגו.",
     "viewDetails": "הצגת פרטים",
     "failedRowsTitle": "שורות CSV שלא נקראו",
@@ -2500,11 +2500,11 @@
     "you": "את/ה",
     "memberName": "שם",
     "memberEmail": "אימייל",
-    "memberEmailHint": "אופציונלי — שימושי אם תזמינו אותם בהמשך כמשתמשי Securo.",
-    "linkedUser": "משתמש Securo מקושר",
+    "memberEmailHint": "אופציונלי — שימושי אם תזמינו אותם בהמשך כמשתמשי Miza.",
+    "linkedUser": "משתמש Miza מקושר",
     "linkedUserNone": "— לא מקושר (לא משתמש) —",
-    "linkedUserHint": "בחרו משתמש Securo קיים כדי לקשר את החבר, או השאירו לא מקושר כדי להוסיף מי שאינו משתמש (למשל מישהו שעדיין אין לו חשבון).",
-    "willLinkToUser": "יקושר למשתמש Securo הקיים {{email}}",
+    "linkedUserHint": "בחרו משתמש Miza קיים כדי לקשר את החבר, או השאירו לא מקושר כדי להוסיף מי שאינו משתמש (למשל מישהו שעדיין אין לו חשבון).",
+    "willLinkToUser": "יקושר למשתמש Miza הקיים {{email}}",
     "sharedWithYou": "משותף איתך",
     "sharedRowBadge": "משותף · {{group}}",
     "sharedRowBadgeAuthor": "{{author}} · {{group}}",
@@ -2584,7 +2584,7 @@
     "show": "הצגת ערכים"
   },
   "setup": {
-    "title": "ברוכים הבאים ל-Securo",
+    "title": "ברוכים הבאים ל-Miza",
     "description": "צרו חשבון מנהל כדי להתחיל.",
     "confirmPassword": "אימות סיסמה",
     "createAdmin": "יצירת חשבון מנהל",
@@ -2612,14 +2612,14 @@
     "passwordLabel": "סיסמה (אופציונלי)",
     "passwordPlaceholder": "השאירו ריק לגיבוי לא מוצפן",
     "passwordTooShort": "השתמשו בלפחות {{min}} תווים",
-    "encryptionNote": "הארכיון מוצפן ב-AES-256 ונפתח בכל תוכנת ארכיון סטנדרטית. Securo לא שומר את הסיסמה ואינו יכול לשחזר את הקובץ בלעדיה.",
+    "encryptionNote": "הארכיון מוצפן ב-AES-256 ונפתח בכל תוכנת ארכיון סטנדרטית. Miza לא שומר את הסיסמה ואינו יכול לשחזר את הקובץ בלעדיה.",
     "successEncrypted": "הגיבוי המוצפן הורד בהצלחה"
   },
   "update": {
     "title": "עדכון שרת",
     "runningLabel": "פועלת",
     "newVersionAvailable": "גרסה חדשה זמינה:",
-    "description": "גרסה חדשה של Securo זמינה. כדאי לעדכן אם:",
+    "description": "גרסה חדשה של Miza זמינה. כדאי לעדכן אם:",
     "reasonFeatures": "אתם רוצים את התכונות והשיפורים האחרונים",
     "reasonBugs": "אתם נתקלים בבעיות שאולי נפתרו בגרסה החדשה",
     "releaseNotesHintBefore": "מומלץ לעיין ב",
@@ -2746,7 +2746,7 @@
       }
     },
     "title": "סוכנים",
-    "subtitle": "בנו עוזרים שיחתיים על בסיס נתוני Securo שלך. לכל סוכן יכולים להיות מאגר ידע, כלים וספק משלו.",
+    "subtitle": "בנו עוזרים שיחתיים על בסיס נתוני Miza שלך. לכל סוכן יכולים להיות מאגר ידע, כלים וספק משלו.",
     "newAgent": "סוכן חדש",
     "newConversation": "שיחה חדשה",
     "conversationsCount": "שיחות",
@@ -2937,14 +2937,14 @@
     },
     "mcpExternal": {
       "title": "גישת MCP חיצונית",
-      "subtitle": "חברו סוכן חיצוני (Claude Desktop, ChatGPT, n8n, לקוח מותאם) לשרת ה-MCP המובנה של Securo. הטוקן למטה מוגבל למשתמש שלך ותוקפו פג בעוד {{days}} ימים.",
+      "subtitle": "חברו סוכן חיצוני (Claude Desktop, ChatGPT, n8n, לקוח מותאם) לשרת ה-MCP המובנה של Miza. הטוקן למטה מוגבל למשתמש שלך ותוקפו פג בעוד {{days}} ימים.",
       "copy": "העתקה",
       "copied": "הועתק",
       "copyFailed": "ההעתקה נכשלה",
       "mint": "יצירת טוקן",
       "minting": "יוצר…",
       "mintFailed": "לא ניתן ליצור טוקן",
-      "warning": "העתיקו עכשיו — Securo לא שומר את הטוקן, ולכן לא נוכל להציג אותו שוב. לביטול, החליפו את AGENTS_MCP_JWT_SECRET.",
+      "warning": "העתיקו עכשיו — Miza לא שומר את הטוקן, ולכן לא נוכל להציג אותו שוב. לביטול, החליפו את AGENTS_MCP_JWT_SECRET.",
       "regenerate": "יצירת טוקן נוסף",
       "snippets": {
         "token": "טוקן",
@@ -2996,7 +2996,7 @@
       "optional": "אופציונלי",
       "empty": {
         "title": "אין עדיין חיבורים",
-        "subtitle": "הוסיפו חיבור כדי לכוון את Securo אל Ollama מקומי, OpenAI, Anthropic או כל נקודת קצה תואמת OpenAI."
+        "subtitle": "הוסיפו חיבור כדי לכוון את Miza אל Ollama מקומי, OpenAI, Anthropic או כל נקודת קצה תואמת OpenAI."
       }
     }
   },
@@ -3357,7 +3357,7 @@
     "viewSource": "הצגת קוד המקור",
     "revoked": "בוטל",
     "unavailable": "לא זמין",
-    "needsVersion": "דורש Securo {{version}}",
+    "needsVersion": "דורש Miza {{version}}",
     "updateAvailable": "עדכון זמין",
     "installed": "מותקן",
     "install": "התקנה",
@@ -3407,11 +3407,11 @@
       "defaults_two": "יוצר גם {{count}} קטגוריות ברירת מחדל שהכללים שלו צריכים",
       "themes": "מוסיף ערכות נושא לספרייה: {{names}}",
       "themesRemove": "מסיר את ערכות הנושא האלה מהספרייה: {{names}}",
-      "themeInUse": "ערכת הנושא {{name}} בשימוש אצלכם: תחזרו לערכת הנושא של Securo עצמה."
+      "themeInUse": "ערכת הנושא {{name}} בשימוש אצלכם: תחזרו לערכת הנושא של Miza עצמה."
     },
     "page": {
       "section": "קטלוג",
-      "notice": "תוספים אינם נבדקים על ידי Securo. לפני שמשהו מוחל רואים בדיוק מה משתנה, ושום דבר לא יוצא מהשרת שלך.",
+      "notice": "תוספים אינם נבדקים על ידי Miza. לפני שמשהו מוחל רואים בדיוק מה משתנה, ושום דבר לא יוצא מהשרת שלך.",
       "search": "חיפוש תוספים",
       "type": {
         "data": "נתונים",
@@ -3485,7 +3485,7 @@
       "insideHint": "כל מה שהתוסף מוסיף לסביבת עבודה. ההתקנה מראה מה מתוכם כבר יש לך.",
       "noReadme": "המחבר לא כתב README לתוסף זה.",
       "loadFailed": "לא ניתן לטעון את פרטי התוסף.",
-      "contentsUnavailable": "גרסה זו של Securo לא יכולה להציג את תוכן התוסף.",
+      "contentsUnavailable": "גרסה זו של Miza לא יכולה להציג את תוכן התוסף.",
       "version": "גרסה",
       "license": "רישיון",
       "requires": "דורש",
@@ -3509,7 +3509,7 @@
       "remove": "לא נשארו כאן פריטים שלו; ההסרה רק מוציאה אותו מהרשימה."
     },
     "code": {
-      "runsCode": "תוסף זה מריץ קוד בשרת שלך, מבודד מ-Securo ומהנתונים שלך. תוספים אינם נבדקים על ידי Securo: התקינו רק קוד שאתם סומכים עליו.",
+      "runsCode": "תוסף זה מריץ קוד בשרת שלך, מבודד מ-Miza ומהנתונים שלך. תוספים אינם נבדקים על ידי Miza: התקינו רק קוד שאתם סומכים עליו.",
       "network": "מתחבר אל",
       "noNetwork": "שום דבר: אף נתון לא יוצא מהשרת שלך.",
       "access": "משתמש בסביבת עבודה זו ב",
@@ -3546,7 +3546,7 @@
         "remove": "הקוד שלו מפסיק לרוץ בסביבת עבודה זו."
       },
       "provides": "מסתנכרן כבנק מחובר",
-      "providesHint": "Securo מוסיף רשומות אלה לסביבת עבודה זו ומעדכן אותן באופן שוטף, כמו עבור בנק מחובר. כל חיבור מופיע תחת חיבורי בנק.",
+      "providesHint": "Miza מוסיף רשומות אלה לסביבת עבודה זו ומעדכן אותן באופן שוטף, כמו עבור בנק מחובר. כל חיבור מופיע תחת חיבורי בנק.",
       "kinds": {
         "accounts": "חשבונות",
         "transactions": "תנועות",
@@ -3600,7 +3600,7 @@
     },
     "oauth": {
       "title": "משלים את ההתחברות",
-      "wait": "Securo שומר את החיבור. זה לוקח רגע.",
+      "wait": "Miza שומר את החיבור. זה לוקח רגע.",
       "connected": "{{name}} חובר",
       "failed": "לא ניתן היה להשלים את ההתחברות. נסו שוב.",
       "missing": "השירות לא החזיר את ההתחברות. נסו שוב.",
@@ -3611,7 +3611,7 @@
   },
   "library": {
     "title": "ספרייה",
-    "subtitle": "בחרו מה יוצג בלוח הבקרה ובדוחות, ואיך Securo נראה.",
+    "subtitle": "בחרו מה יוצג בלוח הבקרה ובדוחות, ואיך Miza נראה.",
     "kind": {
       "widgets": "וידג'טים",
       "reports": "דוחות",
@@ -3635,7 +3635,7 @@
     "remove": "הסרה",
     "add": "הוספה",
     "theme": {
-      "securo": "Securo",
+      "Miza": "Miza",
       "ocean": "אוקיינוס",
       "forest": "יער",
       "sunset": "שקיעה",

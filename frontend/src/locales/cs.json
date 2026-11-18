@@ -64,7 +64,7 @@
     "archiveConfirmDescription": "Pracovní prostor „{{name}}“ bude odebrán z vašeho seznamu. Data zůstanou zachována a správce ho může později obnovit."
   },
   "app": {
-    "name": "Securo",
+    "name": "Miza",
     "versionAriaLabel": "Spuštěná verze {{version}}",
     "versionLabel": "Verze {{version}}",
     "updateAvailable": "Dostupná aktualizace",
@@ -251,7 +251,7 @@
       "presetTracking": "Sledovat platby",
       "presetDocument": "Vystavovat doklady",
       "presetTrackingHint": "Fakturujete jinde. Tady sledujete, kdo vám dluží a zda peníze přišly.",
-      "presetDocumentHint": "Securo píše fakturu, kterou klient dostane. Potřebuje vědět, co účtujete.",
+      "presetDocumentHint": "Miza píše fakturu, kterou klient dostane. Potřebuje vědět, co účtujete.",
       "numberPrefix": "Předpona čísla",
       "paymentTerms": "Splatnost (dny)",
       "issuerName": "Název vaší firmy",
@@ -816,9 +816,9 @@
     "passkeysCleanupDescription": "Lokální přihlášení je vypnuté. Uložené přístupové klíče můžete odstranit, ale nemůžete přidávat nové.",
     "passkeyLoadError": "Passkey se nepodařilo načíst",
     "passkeyUnsupported": "Tento prohlížeč nepodporuje passkey.",
-    "passkeyInsecureContext": "Passkey vyžadují zabezpečené připojení. Otevřete Securo přes HTTPS nebo na http://localhost.",
-    "passkeyIpAddress": "Passkey nefungují na IP adrese. Otevřete Securo na doménovém jménu přes HTTPS nebo na http://localhost.",
-    "passkeyDomainError": "Prohlížeč odmítl tuto doménu pro passkey. Otevřete Securo přes HTTPS na doméně, pro kterou je nakonfigurováno.",
+    "passkeyInsecureContext": "Passkey vyžadují zabezpečené připojení. Otevřete Miza přes HTTPS nebo na http://localhost.",
+    "passkeyIpAddress": "Passkey nefungují na IP adrese. Otevřete Miza na doménovém jménu přes HTTPS nebo na http://localhost.",
+    "passkeyDomainError": "Prohlížeč odmítl tuto doménu pro passkey. Otevřete Miza přes HTTPS na doméně, pro kterou je nakonfigurováno.",
     "passkeyDomainMismatch": "Tato adresa je mimo doménu passkey nastavenou na serveru (WEBAUTHN_RP_ID).",
     "passkeyDuplicate": "Toto zařízení už má passkey pro váš účet.",
     "passkeyWaiting": "Čeká se na vaše zařízení...",
@@ -1430,7 +1430,7 @@
       "openBridge": "Vygenerovat token v SimpleFIN Bridge",
       "tokenLabel": "Setup token",
       "tokenPlaceholder": "Vložit přijatý token…",
-      "tokenHelp": "Setup token je na jedno použití. Securo si z něj vyžádá soukromou přístupovou URL a uloží ji zašifrovanou.",
+      "tokenHelp": "Setup token je na jedno použití. Miza si z něj vyžádá soukromou přístupovou URL a uloží ji zašifrovanou.",
       "connect": "Propojit",
       "connecting": "Propojuje se…",
       "simplefin": {
@@ -1491,7 +1491,7 @@
     "colBalance": "Zůstatek",
     "adjustAction": "Aktualizovat zůstatek",
     "adjustTitle": "Aktualizovat zbývající dluh",
-    "adjustHint": "Zadejte zůstatek, který uvádí věřitel. Securo zapíše rozdíl jako jednu transakci na tomto úvěru, aby indexované nebo přejednané smlouvy odpovídaly bance.",
+    "adjustHint": "Zadejte zůstatek, který uvádí věřitel. Miza zapíše rozdíl jako jednu transakci na tomto úvěru, aby indexované nebo přejednané smlouvy odpovídaly bance.",
     "adjustBalance": "Zbývající dluh",
     "adjustDate": "Datum výpisu",
     "adjustDescription": "Popis",
@@ -1519,7 +1519,7 @@
     "syncAssets": "Importovat investiční aktiva",
     "syncAssetsHint": "Pokud je vypnuto, propojení synchronizuje účty a transakce, ale investiční pozice od poskytovatele nechá beze změny.",
     "initialSyncSettings": "Možnosti synchronizace",
-    "initialSyncSettingsDesc": "Vyberte, co má Securo importovat, než otevřete konektor.",
+    "initialSyncSettingsDesc": "Vyberte, co má Miza importovat, než otevřete konektor.",
     "continueToConnector": "Pokračovat ke konektoru"
   },
   "settings": {
@@ -1702,7 +1702,7 @@
     "priceChangeAmount": "{{old}} → {{new}}",
     "priceChangeDelta": "{{absolute}} ({{percent}})",
     "priceChangeGap": "After a {{days}}-day gap",
-    "priceChangeInsufficient": "At least 3 matched posted charges are needed before Securo reports a stable price change."
+    "priceChangeInsufficient": "At least 3 matched posted charges are needed before Miza reports a stable price change."
   },
   "rules": {
     "searchPlaceholder": "Hledat pravidla...",
@@ -2017,9 +2017,9 @@
     "outflowColumn": "Sloupec výdajů",
     "selectColumn": "Vybrat sloupec...",
     "columnMapping": "Přiřazení sloupců",
-    "columnMappingHint": "Přiřaďte sloupce svého CSV k polím Securo. Ponechte automatické rozpoznání, pokud chcete zachovat rozpoznaný sloupec.",
+    "columnMappingHint": "Přiřaďte sloupce svého CSV k polím Miza. Ponechte automatické rozpoznání, pokud chcete zachovat rozpoznaný sloupec.",
     "columnAutoDetect": "Rozpoznat automaticky",
-    "mappingNeeded": "Sloupce vašeho CSV se nepodařilo rozpoznat automaticky. Pokračujte tak, že je níže přiřadíte k polím Securo.",
+    "mappingNeeded": "Sloupce vašeho CSV se nepodařilo rozpoznat automaticky. Pokračujte tak, že je níže přiřadíte k polím Miza.",
     "failedRowsWarning": "{{count}} řádek(ů) v tomto souboru se nepodařilo zpracovat a byly přeskočeny.",
     "viewDetails": "Zobrazit podrobnosti",
     "failedRowsTitle": "Nezpracované řádky CSV",
@@ -2636,11 +2636,11 @@
     "you": "vy",
     "memberName": "Jméno",
     "memberEmail": "E-mail",
-    "memberEmailHint": "Volitelné — hodí se, pokud je později pozvete jako uživatele Securo.",
-    "linkedUser": "Propojený uživatel Securo",
+    "memberEmailHint": "Volitelné — hodí se, pokud je později pozvete jako uživatele Miza.",
+    "linkedUser": "Propojený uživatel Miza",
     "linkedUserNone": "— Nepropojeno (není uživatel) —",
-    "linkedUserHint": "Vyberte existujícího uživatele Securo pro propojení člena, nebo ponechte nepropojené a přidejte neuživatele (např. někoho, kdo ještě nemá účet).",
-    "willLinkToUser": "Propojí se s existujícím uživatelem Securo {{email}}",
+    "linkedUserHint": "Vyberte existujícího uživatele Miza pro propojení člena, nebo ponechte nepropojené a přidejte neuživatele (např. někoho, kdo ještě nemá účet).",
+    "willLinkToUser": "Propojí se s existujícím uživatelem Miza {{email}}",
     "sharedWithYou": "Sdíleno s vámi",
     "sharedRowBadge": "Sdíleno · {{group}}",
     "sharedRowBadgeAuthor": "{{author}} · {{group}}",
@@ -2728,7 +2728,7 @@
     "show": "Zobrazit hodnoty"
   },
   "setup": {
-    "title": "Vítejte v Securo",
+    "title": "Vítejte v Miza",
     "description": "Začněte vytvořením účtu administrátora.",
     "confirmPassword": "Potvrdit heslo",
     "createAdmin": "Vytvořit účet administrátora",
@@ -2756,14 +2756,14 @@
     "passwordLabel": "Heslo (volitelné)",
     "passwordPlaceholder": "Ponechat prázdné pro nešifrovanou zálohu",
     "passwordTooShort": "Použijte alespoň {{min}} znaků",
-    "encryptionNote": "Archiv je šifrován pomocí AES-256 a otevře se v jakémkoli běžném archivátoru. Securo toto heslo neukládá a bez něj soubor nedokáže obnovit.",
+    "encryptionNote": "Archiv je šifrován pomocí AES-256 a otevře se v jakémkoli běžném archivátoru. Miza toto heslo neukládá a bez něj soubor nedokáže obnovit.",
     "successEncrypted": "Šifrovaná záloha úspěšně stažena"
   },
   "update": {
     "title": "Aktualizace serveru",
     "runningLabel": "běží",
     "newVersionAvailable": "Dostupná nová verze:",
-    "description": "Je dostupná nová verze Securo. Zvažte aktualizaci, pokud:",
+    "description": "Je dostupná nová verze Miza. Zvažte aktualizaci, pokud:",
     "reasonFeatures": "chcete mít přístup k nejnovějším funkcím a vylepšením",
     "reasonBugs": "máte problémy, které mohou být v nové verzi vyřešeny",
     "releaseNotesHintBefore": "Před aktualizací doporučujeme projít",
@@ -2890,7 +2890,7 @@
       }
     },
     "title": "Agenti",
-    "subtitle": "Vytvářet konverzační asistenty nad vlastními daty v Securo. Každý agent může mít vlastní znalostní bázi, nástroje a poskytovatele.",
+    "subtitle": "Vytvářet konverzační asistenty nad vlastními daty v Miza. Každý agent může mít vlastní znalostní bázi, nástroje a poskytovatele.",
     "newAgent": "Nový agent",
     "newConversation": "Nová konverzace",
     "conversationsCount": "Konverzace",
@@ -3089,14 +3089,14 @@
     },
     "mcpExternal": {
       "title": "Externí MCP přístup",
-      "subtitle": "Připojit externího agenta (Claude Desktop, ChatGPT, n8n, vlastní klient) k vestavěnému MCP serveru Securo. Token níže je vázaný na vašeho uživatele a jeho platnost vyprší za {{days}} dní.",
+      "subtitle": "Připojit externího agenta (Claude Desktop, ChatGPT, n8n, vlastní klient) k vestavěnému MCP serveru Miza. Token níže je vázaný na vašeho uživatele a jeho platnost vyprší za {{days}} dní.",
       "copy": "Kopírovat",
       "copied": "Zkopírováno",
       "copyFailed": "Kopírování se nezdařilo",
       "mint": "Vygenerovat token",
       "minting": "Generování…",
       "mintFailed": "Token se nepodařilo vygenerovat",
-      "warning": "Zkopírujte si ho teď — Securo token neukládá, takže ho už znovu nezobrazíme. Zneplatníte ho rotací AGENTS_MCP_JWT_SECRET.",
+      "warning": "Zkopírujte si ho teď — Miza token neukládá, takže ho už znovu nezobrazíme. Zneplatníte ho rotací AGENTS_MCP_JWT_SECRET.",
       "regenerate": "Vygenerovat další",
       "snippets": {
         "token": "Token",
@@ -3148,7 +3148,7 @@
       "optional": "volitelné",
       "empty": {
         "title": "Zatím žádná připojení",
-        "subtitle": "Přidejte připojení a nasměrujte Securo na lokální Ollamu, OpenAI, Anthropic nebo libovolný OpenAI-compatible endpoint."
+        "subtitle": "Přidejte připojení a nasměrujte Miza na lokální Ollamu, OpenAI, Anthropic nebo libovolný OpenAI-compatible endpoint."
       }
     }
   },
@@ -3511,7 +3511,7 @@
     "viewSource": "Zobrazit zdrojový kód",
     "revoked": "Odvoláno",
     "unavailable": "Nedostupné",
-    "needsVersion": "Vyžaduje Securo {{version}}",
+    "needsVersion": "Vyžaduje Miza {{version}}",
     "updateAvailable": "Dostupná aktualizace",
     "installed": "Nainstalováno",
     "install": "Nainstalovat",
@@ -3565,11 +3565,11 @@
       "defaults_other": "Vytvoří také {{count}} výchozích kategorií pro pravidla",
       "themes": "Přidá do knihovny motivy: {{names}}",
       "themesRemove": "Odebere z knihovny tyto motivy: {{names}}",
-      "themeInUse": "Používáte motiv {{name}}: vrátíte se k motivu Securo."
+      "themeInUse": "Používáte motiv {{name}}: vrátíte se k motivu Miza."
     },
     "page": {
       "section": "Katalog",
-      "notice": "Pluginy Securo nekontroluje. Než se cokoli použije, uvidíte přesně, co se změní, a nic neopustí váš server.",
+      "notice": "Pluginy Miza nekontroluje. Než se cokoli použije, uvidíte přesně, co se změní, a nic neopustí váš server.",
       "search": "Hledat pluginy",
       "type": {
         "data": "Data",
@@ -3646,7 +3646,7 @@
       "insideHint": "Vše, co tento plugin přidá do prostoru. Při instalaci uvidíte, co už máte.",
       "noReadme": "Autor zatím pro tento plugin nenapsal README.",
       "loadFailed": "Podrobnosti pluginu se nepodařilo načíst.",
-      "contentsUnavailable": "Tato verze Securo neumí vypsat obsah tohoto pluginu.",
+      "contentsUnavailable": "Tato verze Miza neumí vypsat obsah tohoto pluginu.",
       "version": "Verze",
       "license": "Licence",
       "requires": "Vyžaduje",
@@ -3670,7 +3670,7 @@
       "remove": "Žádná jeho položka tu nezůstala; odebrání ho jen vyřadí ze seznamu."
     },
     "code": {
-      "runsCode": "Tento plugin spouští kód na vašem serveru, oddělený od Securo a vašich dat. Securo pluginy nekontroluje: instalujte jen kód, kterému důvěřujete.",
+      "runsCode": "Tento plugin spouští kód na vašem serveru, oddělený od Miza a vašich dat. Miza pluginy nekontroluje: instalujte jen kód, kterému důvěřujete.",
       "network": "Připojuje se k",
       "noNetwork": "Ničemu: žádná data neopouštějí váš server.",
       "access": "Používá v tomto pracovním prostoru",
@@ -3707,7 +3707,7 @@
         "remove": "Jeho kód v tomto pracovním prostoru přestane běžet."
       },
       "provides": "Synchronizuje se jako připojená banka",
-      "providesHint": "Securo přidá tyto záznamy do tohoto pracovního prostoru a udržuje je aktuální, jako u připojené banky. Každé připojení se zobrazí v sekci „Propojení bank“.",
+      "providesHint": "Miza přidá tyto záznamy do tohoto pracovního prostoru a udržuje je aktuální, jako u připojené banky. Každé připojení se zobrazí v sekci „Propojení bank“.",
       "kinds": {
         "accounts": "Účty",
         "transactions": "transakce",
@@ -3761,7 +3761,7 @@
     },
     "oauth": {
       "title": "Dokončování přihlášení",
-      "wait": "Securo ukládá připojení. Chvíli to potrvá.",
+      "wait": "Miza ukládá připojení. Chvíli to potrvá.",
       "connected": "{{name}}: připojeno",
       "failed": "Přihlášení se nepodařilo dokončit. Zkuste to znovu.",
       "missing": "Služba přihlášení nevrátila. Zkuste to znovu.",
@@ -3772,7 +3772,7 @@
   },
   "library": {
     "title": "Knihovna",
-    "subtitle": "Vyberte, co ukazuje přehled a reporty a jak Securo vypadá.",
+    "subtitle": "Vyberte, co ukazuje přehled a reporty a jak Miza vypadá.",
     "kind": {
       "widgets": "Widgety",
       "reports": "Reporty",
@@ -3796,7 +3796,7 @@
     "remove": "Odebrat",
     "add": "Přidat",
     "theme": {
-      "securo": "Securo",
+      "Miza": "Miza",
       "ocean": "Oceán",
       "forest": "Les",
       "sunset": "Západ slunce",

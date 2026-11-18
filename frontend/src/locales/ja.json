@@ -64,7 +64,7 @@
     "archiveConfirmDescription": "ワークスペース「{{name}}」が一覧から削除されます。データは保持され、管理者が後から復元できます。"
   },
   "app": {
-    "name": "Securo",
+    "name": "Miza",
     "versionAriaLabel": "実行中のバージョン: {{version}}",
     "versionLabel": "バージョン {{version}}",
     "updateAvailable": "更新があります",
@@ -1407,7 +1407,7 @@
     "colBalance": "残高",
     "adjustAction": "残高を更新",
     "adjustTitle": "残債を更新",
-    "adjustHint": "貸し手が示す残高を入力してください。Securo は差額をこのローンの取引として 1 件記録し、指数連動や条件変更のある契約も金融機関と一致させます。",
+    "adjustHint": "貸し手が示す残高を入力してください。Miza は差額をこのローンの取引として 1 件記録し、指数連動や条件変更のある契約も金融機関と一致させます。",
     "adjustBalance": "残債",
     "adjustDate": "明細の日付",
     "adjustDescription": "説明",
@@ -3339,7 +3339,7 @@
     "viewSource": "ソースを見る",
     "revoked": "取り消し済み",
     "unavailable": "利用不可",
-    "needsVersion": "Securo {{version}} が必要",
+    "needsVersion": "Miza {{version}} が必要",
     "updateAvailable": "アップデートあり",
     "installed": "インストール済み",
     "install": "インストール",
@@ -3385,11 +3385,11 @@
       "defaults_other": "ルール用のデフォルトカテゴリも {{count}} 件作成します",
       "themes": "ライブラリにテーマを追加します：{{names}}",
       "themesRemove": "これらのテーマをライブラリから外します：{{names}}",
-      "themeInUse": "{{name}} を使用中です。Securo のテーマに戻ります。"
+      "themeInUse": "{{name}} を使用中です。Miza のテーマに戻ります。"
     },
     "page": {
       "section": "カタログ",
-      "notice": "プラグインは Securo によって審査されていません。適用する前に何が変わるかを正確に確認でき、データはサーバーの外に出ません。",
+      "notice": "プラグインは Miza によって審査されていません。適用する前に何が変わるかを正確に確認でき、データはサーバーの外に出ません。",
       "search": "プラグインを検索",
       "type": {
         "data": "データ",
@@ -3460,7 +3460,7 @@
       "insideHint": "このプラグインがワークスペースに追加するすべての項目。インストール時に既存のものを確認できます。",
       "noReadme": "作者はまだこのプラグインの README を書いていません。",
       "loadFailed": "プラグインの詳細を読み込めませんでした。",
-      "contentsUnavailable": "この Securo のバージョンではこのプラグインの内容を表示できません。",
+      "contentsUnavailable": "この Miza のバージョンではこのプラグインの内容を表示できません。",
       "version": "バージョン",
       "license": "ライセンス",
       "requires": "必要条件",
@@ -3484,7 +3484,7 @@
       "remove": "項目はもう残っていません。削除するとリストから外れるだけです。"
     },
     "code": {
-      "runsCode": "このプラグインはサーバー上でコードを実行します。Securo やデータからは隔離されています。プラグインは Securo の審査を受けていません。信頼できるコードだけをインストールしてください。",
+      "runsCode": "このプラグインはサーバー上でコードを実行します。Miza やデータからは隔離されています。プラグインは Miza の審査を受けていません。信頼できるコードだけをインストールしてください。",
       "network": "接続先",
       "noNetwork": "なし：データがサーバーの外に出ることはありません。",
       "access": "このワークスペースで使うもの",
@@ -3521,7 +3521,7 @@
         "remove": "このワークスペースでのコードの実行が止まります。"
       },
       "provides": "接続済みの銀行として同期",
-      "providesHint": "Securo はこれらの記録をこのワークスペースに追加し、接続済みの銀行と同じように最新の状態に保ちます。各接続は「銀行接続」に表示されます。",
+      "providesHint": "Miza はこれらの記録をこのワークスペースに追加し、接続済みの銀行と同じように最新の状態に保ちます。各接続は「銀行接続」に表示されます。",
       "kinds": {
         "accounts": "口座",
         "transactions": "取引",
@@ -3575,7 +3575,7 @@
     },
     "oauth": {
       "title": "サインインを完了しています",
-      "wait": "Securo が接続を保存しています。少々お待ちください。",
+      "wait": "Miza が接続を保存しています。少々お待ちください。",
       "connected": "{{name}} を接続しました",
       "failed": "サインインを完了できませんでした。もう一度お試しください。",
       "missing": "サービスからサインインの結果が返されませんでした。もう一度お試しください。",
@@ -3610,7 +3610,7 @@
     "remove": "外す",
     "add": "追加",
     "theme": {
-      "securo": "Securo",
+      "Miza": "Miza",
       "ocean": "オーシャン",
       "forest": "フォレスト",
       "sunset": "サンセット",

@@ -64,7 +64,7 @@
     "archiveConfirmDescription": "Ez a munkaterület kikerül a listádból: „{{name}}”. Az adatok megmaradnak, és egy adminisztrátor később visszaállíthatja."
   },
   "app": {
-    "name": "Securo",
+    "name": "Miza",
     "versionAriaLabel": "Futó verzió: {{version}}",
     "versionLabel": "Verzió: {{version}}",
     "updateAvailable": "Frissítés érhető el",
@@ -247,7 +247,7 @@
       "presetTracking": "Befizetések követése",
       "presetDocument": "Dokumentumok kiállítása",
       "presetTrackingHint": "Máshol számlázol. Itt azt követed, ki tartozik neked, és megérkezett-e a pénz.",
-      "presetDocumentHint": "A Securo készíti el a számlát, amit az ügyfeled megkap. Ehhez meg kell adnod, mit számlázol.",
+      "presetDocumentHint": "A Miza készíti el a számlát, amit az ügyfeled megkap. Ehhez meg kell adnod, mit számlázol.",
       "numberPrefix": "Sorszám előtagja",
       "paymentTerms": "Fizetési határidő (nap)",
       "issuerName": "Vállalkozásod neve",
@@ -426,7 +426,7 @@
       "notOurs": "A dokumentumot máshol állították ki",
       "notOursHint": "Csatold a kapott fájlt, és itt pontosan úgy jelenik meg, ahogy megérkezett.",
       "ourPage": "Számla",
-      "rendered": "Készítette: Securo · {{date}}",
+      "rendered": "Készítette: Miza · {{date}}",
       "kindLabel": "Dokumentum típusa",
       "fromSystem": "Forrás: {{source}} · {{date}}",
       "fromUpload": "Feltöltve · {{date}}"
@@ -1346,7 +1346,7 @@
       "openBridge": "Token generálása a SimpleFIN Bridge-en",
       "tokenLabel": "Beállítási token",
       "tokenPlaceholder": "Illeszd be a kapott tokent…",
-      "tokenHelp": "A beállítási token egyszer használható. A Securo egy privát hozzáférési URL-t kér le vele, és azt titkosítva tárolja.",
+      "tokenHelp": "A beállítási token egyszer használható. A Miza egy privát hozzáférési URL-t kér le vele, és azt titkosítva tárolja.",
       "connect": "Csatlakozás",
       "connecting": "Csatlakozás…",
       "simplefin": {
@@ -1407,7 +1407,7 @@
     "colBalance": "Fennálló tartozás",
     "adjustAction": "Egyenleg frissítése",
     "adjustTitle": "Fennálló tartozás frissítése",
-    "adjustHint": "Add meg a hitelező által közölt egyenleget. A Securo a különbséget egy tranzakcióként rögzíti ezen a hitelen, így az indexált vagy újratárgyalt szerződések egyeznek a bankkal.",
+    "adjustHint": "Add meg a hitelező által közölt egyenleget. A Miza a különbséget egy tranzakcióként rögzíti ezen a hitelen, így az indexált vagy újratárgyalt szerződések egyeznek a bankkal.",
     "adjustBalance": "Fennálló tartozás",
     "adjustDate": "Kivonat dátuma",
     "adjustDescription": "Leírás",
@@ -1435,7 +1435,7 @@
     "syncAssets": "Befektetési eszközök importálása",
     "syncAssetsHint": "Ha ki van kapcsolva, ez a kapcsolat szinkronizálja a számlákat és tranzakciókat, de a szolgáltatónál lévő befektetési állományt érintetlenül hagyja.",
     "initialSyncSettings": "Szinkronizálási beállítások",
-    "initialSyncSettingsDesc": "Válaszd ki, mit importáljon a Securo, mielőtt megnyitja a csatlakozót.",
+    "initialSyncSettingsDesc": "Válaszd ki, mit importáljon a Miza, mielőtt megnyitja a csatlakozót.",
     "continueToConnector": "Tovább a csatlakozóhoz"
   },
   "settings": {
@@ -1606,7 +1606,7 @@
     "priceChangeAmount": "{{old}} → {{new}}",
     "priceChangeDelta": "{{absolute}} ({{percent}})",
     "priceChangeGap": "After a {{days}}-day gap",
-    "priceChangeInsufficient": "At least 3 matched posted charges are needed before Securo reports a stable price change."
+    "priceChangeInsufficient": "At least 3 matched posted charges are needed before Miza reports a stable price change."
   },
   "rules": {
     "searchPlaceholder": "Szabályok keresése...",
@@ -1901,9 +1901,9 @@
     "outflowColumn": "Kimenő oszlop",
     "selectColumn": "Válassz oszlopot...",
     "columnMapping": "Oszlopok hozzárendelése",
-    "columnMappingHint": "Rendeld hozzá a CSV-oszlopaidat a Securo mezőihez. Hagyd automatikus felismerésen, ha a felismert oszlopot szeretnéd megtartani.",
+    "columnMappingHint": "Rendeld hozzá a CSV-oszlopaidat a Miza mezőihez. Hagyd automatikus felismerésen, ha a felismert oszlopot szeretnéd megtartani.",
     "columnAutoDetect": "Automatikus felismerés",
-    "mappingNeeded": "Nem sikerült automatikusan felismerni a CSV-oszlopaidat. A folytatáshoz rendeld hozzá őket lent a Securo mezőihez.",
+    "mappingNeeded": "Nem sikerült automatikusan felismerni a CSV-oszlopaidat. A folytatáshoz rendeld hozzá őket lent a Miza mezőihez.",
     "failedRowsWarning": "A fájl {{count}} sorát nem sikerült feldolgozni, ezért kihagytuk.",
     "viewDetails": "Részletek",
     "failedRowsTitle": "Fel nem dolgozott CSV-sorok",
@@ -2484,11 +2484,11 @@
     "you": "te",
     "memberName": "Név",
     "memberEmail": "E-mail",
-    "memberEmailHint": "Nem kötelező — hasznos, ha később meghívod Securo-felhasználónak.",
-    "linkedUser": "Kapcsolt Securo-felhasználó",
+    "memberEmailHint": "Nem kötelező — hasznos, ha később meghívod Miza-felhasználónak.",
+    "linkedUser": "Kapcsolt Miza-felhasználó",
     "linkedUserNone": "— Nincs kapcsolva (nem felhasználó) —",
-    "linkedUserHint": "Válassz egy meglévő Securo-felhasználót, akihez a tagot kapcsolod, vagy hagyd kapcsolat nélkül, ha nem felhasználót adsz hozzá (pl. valakit, akinek még nincs fiókja).",
-    "willLinkToUser": "Kapcsolva lesz a meglévő Securo-felhasználóhoz: {{email}}",
+    "linkedUserHint": "Válassz egy meglévő Miza-felhasználót, akihez a tagot kapcsolod, vagy hagyd kapcsolat nélkül, ha nem felhasználót adsz hozzá (pl. valakit, akinek még nincs fiókja).",
+    "willLinkToUser": "Kapcsolva lesz a meglévő Miza-felhasználóhoz: {{email}}",
     "sharedWithYou": "Megosztva veled",
     "sharedRowBadge": "Megosztott · {{group}}",
     "sharedRowBadgeAuthor": "{{author}} · {{group}}",
@@ -2568,7 +2568,7 @@
     "show": "Értékek megjelenítése"
   },
   "setup": {
-    "title": "Üdvözöl a Securo",
+    "title": "Üdvözöl a Miza",
     "description": "Hozd létre az adminisztrátori fiókodat a kezdéshez.",
     "confirmPassword": "Jelszó megerősítése",
     "createAdmin": "Adminisztrátori fiók létrehozása",
@@ -2596,14 +2596,14 @@
     "passwordLabel": "Jelszó (nem kötelező)",
     "passwordPlaceholder": "Hagyd üresen titkosítatlan mentéshez",
     "passwordTooShort": "Legalább {{min}} karaktert adj meg",
-    "encryptionNote": "Az archívum AES-256 titkosítású, és bármely szabványos tömörítőprogrammal megnyitható. A Securo nem tárolja ezt a jelszót, és nélküle nem tudja helyreállítani a fájlt.",
+    "encryptionNote": "Az archívum AES-256 titkosítású, és bármely szabványos tömörítőprogrammal megnyitható. A Miza nem tárolja ezt a jelszót, és nélküle nem tudja helyreállítani a fájlt.",
     "successEncrypted": "A titkosított biztonsági mentés sikeresen letöltve"
   },
   "update": {
     "title": "Szerverfrissítés",
     "runningLabel": "futó verzió",
     "newVersionAvailable": "Új verzió érhető el:",
-    "description": "Elérhető a Securo új verziója. Érdemes frissítened, ha:",
+    "description": "Elérhető a Miza új verziója. Érdemes frissítened, ha:",
     "reasonFeatures": "Szeretnéd elérni a legújabb funkciókat és fejlesztéseket",
     "reasonBugs": "Olyan problémákba ütközöl, amelyeket az új verzió megoldhat",
     "releaseNotesHintBefore": "Frissítés előtt javasoljuk, hogy nézd át a",
@@ -2730,7 +2730,7 @@
       }
     },
     "title": "Ügynökök",
-    "subtitle": "Építs beszélgetős asszisztenseket a Securo-adataidra. Minden ügynöknek saját tudásbázisa, eszközei és szolgáltatója lehet.",
+    "subtitle": "Építs beszélgetős asszisztenseket a Miza-adataidra. Minden ügynöknek saját tudásbázisa, eszközei és szolgáltatója lehet.",
     "newAgent": "Új ügynök",
     "newConversation": "Új beszélgetés",
     "conversationsCount": "Beszélgetések",
@@ -2921,14 +2921,14 @@
     },
     "mcpExternal": {
       "title": "Külső MCP-hozzáférés",
-      "subtitle": "Csatlakoztass egy külső ügynököt (Claude Desktop, ChatGPT, n8n, saját kliens) a Securo beépített MCP-szerveréhez. Az alábbi token a felhasználódhoz kötött, és {{days}} nap múlva lejár.",
+      "subtitle": "Csatlakoztass egy külső ügynököt (Claude Desktop, ChatGPT, n8n, saját kliens) a Miza beépített MCP-szerveréhez. Az alábbi token a felhasználódhoz kötött, és {{days}} nap múlva lejár.",
       "copy": "Másolás",
       "copied": "Másolva",
       "copyFailed": "A másolás nem sikerült",
       "mint": "Token generálása",
       "minting": "Generálás…",
       "mintFailed": "Nem sikerült tokent generálni",
-      "warning": "Másold ki most — a Securo nem tárolja a tokent, ezért később nem tudjuk újra megmutatni. Visszavonni az AGENTS_MCP_JWT_SECRET lecserélésével lehet.",
+      "warning": "Másold ki most — a Miza nem tárolja a tokent, ezért később nem tudjuk újra megmutatni. Visszavonni az AGENTS_MCP_JWT_SECRET lecserélésével lehet.",
       "regenerate": "Újabb generálása",
       "snippets": {
         "token": "Token",
@@ -2980,7 +2980,7 @@
       "optional": "nem kötelező",
       "empty": {
         "title": "Még nincs kapcsolat",
-        "subtitle": "Adj hozzá egy kapcsolatot, hogy a Securo a helyi Ollamádat, az OpenAI-t, az Anthropicot vagy bármilyen OpenAI-kompatibilis végpontot használhassa."
+        "subtitle": "Adj hozzá egy kapcsolatot, hogy a Miza a helyi Ollamádat, az OpenAI-t, az Anthropicot vagy bármilyen OpenAI-kompatibilis végpontot használhassa."
       }
     }
   },
@@ -3339,7 +3339,7 @@
     "viewSource": "Forráskód megtekintése",
     "revoked": "Visszavonva",
     "unavailable": "Nem érhető el",
-    "needsVersion": "Securo {{version}} szükséges",
+    "needsVersion": "Miza {{version}} szükséges",
     "updateAvailable": "Frissítés érhető el",
     "installed": "Telepítve",
     "install": "Telepítés",
@@ -3385,11 +3385,11 @@
       "defaults_other": "Létrehoz {{count}} alapértelmezett kategóriát is a szabályokhoz",
       "themes": "Témákat ad a könyvtárhoz: {{names}}",
       "themesRemove": "Eltávolítja ezeket a témákat a könyvtárból: {{names}}",
-      "themeInUse": "A(z) {{name}} témát használod: visszaállsz a Securo saját témájára."
+      "themeInUse": "A(z) {{name}} témát használod: visszaállsz a Miza saját témájára."
     },
     "page": {
       "section": "Katalógus",
-      "notice": "A bővítményeket a Securo nem ellenőrzi. Mielőtt bármi érvénybe lép, pontosan látod, mi változik, és semmi sem hagyja el a szerveredet.",
+      "notice": "A bővítményeket a Miza nem ellenőrzi. Mielőtt bármi érvénybe lép, pontosan látod, mi változik, és semmi sem hagyja el a szerveredet.",
       "search": "Bővítmények keresése",
       "type": {
         "data": "Adatok",
@@ -3460,7 +3460,7 @@
       "insideHint": "Minden, amit ez a bővítmény hozzáad egy munkaterülethez. Telepítéskor látod, mi van már meg.",
       "noReadme": "A szerző még nem írt README-t ehhez a bővítményhez.",
       "loadFailed": "Nem sikerült betölteni a bővítmény részleteit.",
-      "contentsUnavailable": "A Securo ezen verziója nem tudja listázni a bővítmény tartalmát.",
+      "contentsUnavailable": "A Miza ezen verziója nem tudja listázni a bővítmény tartalmát.",
       "version": "Verzió",
       "license": "Licenc",
       "requires": "Szükséges",
@@ -3484,7 +3484,7 @@
       "remove": "Egyetlen eleme sem maradt itt; az eltávolítás csak a listáról veszi le."
     },
     "code": {
-      "runsCode": "Ez a bővítmény kódot futtat a szervereden, elkülönítve a Securótól és az adataidtól. A Securo nem ellenőrzi a bővítményeket: csak megbízható kódot telepíts.",
+      "runsCode": "Ez a bővítmény kódot futtat a szervereden, elkülönítve a Securótól és az adataidtól. A Miza nem ellenőrzi a bővítményeket: csak megbízható kódot telepíts.",
       "network": "Elér",
       "noNetwork": "Semmit: semmilyen adat nem hagyja el a szervered.",
       "access": "Ebben a munkaterületben használja",
@@ -3521,7 +3521,7 @@
         "remove": "A kódja ebben a munkaterületben többé nem fut."
       },
       "provides": "Összekapcsolt bankként szinkronizál",
-      "providesHint": "A Securo hozzáadja ezeket az adatokat ehhez a munkaterülethez, és naprakészen tartja őket, mint egy összekapcsolt banknál. Minden kapcsolat a Bankkapcsolatok között jelenik meg.",
+      "providesHint": "A Miza hozzáadja ezeket az adatokat ehhez a munkaterülethez, és naprakészen tartja őket, mint egy összekapcsolt banknál. Minden kapcsolat a Bankkapcsolatok között jelenik meg.",
       "kinds": {
         "accounts": "Számlák",
         "transactions": "tranzakciók",
@@ -3575,7 +3575,7 @@
     },
     "oauth": {
       "title": "Bejelentkezés befejezése",
-      "wait": "A Securo menti a kapcsolatot. Ez egy pillanat.",
+      "wait": "A Miza menti a kapcsolatot. Ez egy pillanat.",
       "connected": "{{name}} csatlakoztatva",
       "failed": "Nem sikerült befejezni a bejelentkezést. Próbáld újra.",
       "missing": "A szolgáltatás nem küldte vissza a bejelentkezést. Próbáld újra.",
@@ -3586,7 +3586,7 @@
   },
   "library": {
     "title": "Könyvtár",
-    "subtitle": "Válaszd ki, mit mutasson az irányítópult és a jelentések, és hogyan nézzen ki a Securo.",
+    "subtitle": "Válaszd ki, mit mutasson az irányítópult és a jelentések, és hogyan nézzen ki a Miza.",
     "kind": {
       "widgets": "Widgetek",
       "reports": "Jelentések",
@@ -3610,7 +3610,7 @@
     "remove": "Eltávolítás",
     "add": "Hozzáadás",
     "theme": {
-      "securo": "Securo",
+      "Miza": "Miza",
       "ocean": "Óceán",
       "forest": "Erdő",
       "sunset": "Naplemente",

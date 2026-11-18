@@ -64,7 +64,7 @@
     "addMemberDescriptionExistingOnly": "Nodig een bestaande gebruiker uit via e-mail."
   },
   "app": {
-    "name": "Securo",
+    "name": "Miza",
     "versionAriaLabel": "Lopende versie {{version}}",
     "versionLabel": "Versie {{version}}",
     "updateAvailable": "Update beschikbaar",
@@ -247,7 +247,7 @@
       "presetTracking": "Track payments",
       "presetDocument": "Issue documents",
       "presetTrackingHint": "Je factureert elders. Hier volg je wie je nog moet betalen en of het geld binnen is.",
-      "presetDocumentHint": "Securo schrijft de factuur die je klant ontvangt. Daarvoor is nodig wat je in rekening brengt.",
+      "presetDocumentHint": "Miza schrijft de factuur die je klant ontvangt. Daarvoor is nodig wat je in rekening brengt.",
       "numberPrefix": "Number prefix",
       "paymentTerms": "Payment terms (days)",
       "issuerName": "Your business name",
@@ -426,7 +426,7 @@
       "notOurs": "Het document is elders uitgegeven",
       "notOursHint": "Voeg het ontvangen bestand toe, dan wordt het hier getoond zoals het binnenkwam.",
       "ourPage": "Factuur",
-      "rendered": "Gegenereerd door Securo · {{date}}",
+      "rendered": "Gegenereerd door Miza · {{date}}",
       "kindLabel": "Documenttype",
       "fromSystem": "Van {{source}} · {{date}}",
       "fromUpload": "Geüpload · {{date}}"
@@ -790,9 +790,9 @@
     "passkeysCleanupDescription": "Lokaal aanmelden is uitgeschakeld. U kunt opgeslagen passkeys verwijderen, maar geen nieuwe toevoegen.",
     "passkeyLoadError": "Kan de passkeys niet laden",
     "passkeyUnsupported": "Deze browser ondersteunt geen passkeys.",
-    "passkeyInsecureContext": "Passkeys hebben een beveiligde verbinding nodig. Open Securo via HTTPS of op http://localhost.",
-    "passkeyIpAddress": "Passkeys werken niet op een IP-adres. Open Securo op een domeinnaam via HTTPS of op http://localhost.",
-    "passkeyDomainError": "Uw browser heeft dit domein afgewezen voor passkeys. Open Securo op het domein waarvoor het is geconfigureerd, via HTTPS.",
+    "passkeyInsecureContext": "Passkeys hebben een beveiligde verbinding nodig. Open Miza via HTTPS of op http://localhost.",
+    "passkeyIpAddress": "Passkeys werken niet op een IP-adres. Open Miza op een domeinnaam via HTTPS of op http://localhost.",
+    "passkeyDomainError": "Uw browser heeft dit domein afgewezen voor passkeys. Open Miza op het domein waarvoor het is geconfigureerd, via HTTPS.",
     "passkeyDomainMismatch": "Dit adres valt buiten het passkeydomein dat op de server is geconfigureerd (WEBAUTHN_RP_ID).",
     "passkeyDuplicate": "Dit apparaat heeft al een passkey voor uw account.",
     "passkeyWaiting": "Wachten op uw apparaat...",
@@ -1347,7 +1347,7 @@
       "openBridge": "Genereer een token bij SimpleFIN Bridge",
       "tokenLabel": "Instellingstoken",
       "tokenPlaceholder": "Plak de token die u heeft ontvangen hier...",
-      "tokenHelp": "Het installatietoken is voor eenmalig gebruik. Securo claimt er een privétoegangs-URL van en slaat deze gecodeerd op.",
+      "tokenHelp": "Het installatietoken is voor eenmalig gebruik. Miza claimt er een privétoegangs-URL van en slaat deze gecodeerd op.",
       "connect": "Verbinden",
       "connecting": "Verbinden…",
       "simplefin": {
@@ -1409,7 +1409,7 @@
     "colBalance": "Restschuld",
     "adjustAction": "Saldo bijwerken",
     "adjustTitle": "Openstaande schuld bijwerken",
-    "adjustHint": "Vul het saldo in dat de geldverstrekker opgeeft. Securo boekt het verschil als één transactie op deze lening, zodat geïndexeerde of heronderhandelde contracten gelijk blijven aan de bank.",
+    "adjustHint": "Vul het saldo in dat de geldverstrekker opgeeft. Miza boekt het verschil als één transactie op deze lening, zodat geïndexeerde of heronderhandelde contracten gelijk blijven aan de bank.",
     "adjustBalance": "Openstaande schuld",
     "adjustDate": "Datum afschrift",
     "adjustDescription": "Omschrijving",
@@ -1437,7 +1437,7 @@
     "syncAssets": "Investeringsactiva importeren",
     "syncAssetsHint": "Indien uitgeschakeld, synchroniseert deze verbinding accounts en transacties, maar laat de investeringen van de provider onaangeroerd.",
     "initialSyncSettings": "Synchronisatie-opties",
-    "initialSyncSettingsDesc": "Kies wat Securo moet importeren voordat u de connector opent.",
+    "initialSyncSettingsDesc": "Kies wat Miza moet importeren voordat u de connector opent.",
     "continueToConnector": "Ga verder naar de connector"
   },
   "settings": {
@@ -1608,7 +1608,7 @@
     "priceChangeAmount": "{{old}} → {{new}}",
     "priceChangeDelta": "{{absolute}} ({{percent}})",
     "priceChangeGap": "Na een onderbreking van {{days}} dagen",
-    "priceChangeInsufficient": "Er zijn minstens 3 gekoppelde geboekte afschrijvingen nodig voordat Securo een stabiele prijswijziging meldt."
+    "priceChangeInsufficient": "Er zijn minstens 3 gekoppelde geboekte afschrijvingen nodig voordat Miza een stabiele prijswijziging meldt."
   },
   "rules": {
     "searchPlaceholder": "Regels zoeken...",
@@ -1903,9 +1903,9 @@
     "outflowColumn": "Uitstroom kolom",
     "selectColumn": "Kolom selecteren...",
     "columnMapping": "Kolomtoewijzing",
-    "columnMappingHint": "Wijs uw CSV-kolommen toe aan Securo-velden. Laat automatische detectie ingeschakeld om de gedetecteerde kolom te behouden.",
+    "columnMappingHint": "Wijs uw CSV-kolommen toe aan Miza-velden. Laat automatische detectie ingeschakeld om de gedetecteerde kolom te behouden.",
     "columnAutoDetect": "Automatische detectie",
-    "mappingNeeded": "We konden uw CSV-kolommen niet automatisch herkennen. Wijs ze toe aan onderstaande Securo-velden om door te gaan.",
+    "mappingNeeded": "We konden uw CSV-kolommen niet automatisch herkennen. Wijs ze toe aan onderstaande Miza-velden om door te gaan.",
     "mapDate": "Datumkolom",
     "mapDescription": "Beschrijving kolom",
     "mapAmount": "Kolom Bedrag",
@@ -2484,11 +2484,11 @@
     "you": "uzelf",
     "memberName": "Naam",
     "memberEmail": "E-mail",
-    "memberEmailHint": "Optioneel – handig als u ze later uitnodigt als Securo-gebruiker.",
-    "linkedUser": "Gekoppelde Securo-gebruiker",
+    "memberEmailHint": "Optioneel – handig als u ze later uitnodigt als Miza-gebruiker.",
+    "linkedUser": "Gekoppelde Miza-gebruiker",
     "linkedUserNone": "— Niet gekoppeld (niet-gebruiker) —",
-    "linkedUserHint": "Kies een bestaande Securo-gebruiker om het lid te koppelen, of laat de link los om een niet-gebruiker toe te voegen (bijvoorbeeld iemand die nog geen account heeft).",
-    "willLinkToUser": "Zal linken naar bestaande Securo-gebruiker {{email}}",
+    "linkedUserHint": "Kies een bestaande Miza-gebruiker om het lid te koppelen, of laat de link los om een niet-gebruiker toe te voegen (bijvoorbeeld iemand die nog geen account heeft).",
+    "willLinkToUser": "Zal linken naar bestaande Miza-gebruiker {{email}}",
     "sharedWithYou": "Met jou gedeeld",
     "sharedRowBadge": "Gedeeld · {{group}}",
     "sharedRowBadgeAuthor": "{{author}} · {{group}}",
@@ -2570,7 +2570,7 @@
     "show": "Toon waarden"
   },
   "setup": {
-    "title": "Welkom bij Securo",
+    "title": "Welkom bij Miza",
     "description": "Maak uw beheerdersaccount aan om aan de slag te gaan.",
     "confirmPassword": "Bevestig wachtwoord",
     "createAdmin": "Maak een beheerdersaccount aan",
@@ -2598,14 +2598,14 @@
     "passwordLabel": "Wachtwoord (optioneel)",
     "passwordPlaceholder": "Laat leeg voor een niet-versleutelde back-up",
     "passwordTooShort": "Gebruik minimaal {{min}} tekens",
-    "encryptionNote": "Het archief is gecodeerd met AES-256 en kan in elk standaard archiveringsprogramma worden geopend. Securo slaat dit wachtwoord niet op en kan het bestand zonder dit wachtwoord niet herstellen.",
+    "encryptionNote": "Het archief is gecodeerd met AES-256 en kan in elk standaard archiveringsprogramma worden geopend. Miza slaat dit wachtwoord niet op en kan het bestand zonder dit wachtwoord niet herstellen.",
     "successEncrypted": "Gecodeerde back-up succesvol gedownload"
   },
   "update": {
     "title": "Server-update",
     "runningLabel": "rennen",
     "newVersionAvailable": "Nieuwe versie beschikbaar:",
-    "description": "Er is een nieuwe versie van Securo beschikbaar. Overweeg een update uit te voeren als u:",
+    "description": "Er is een nieuwe versie van Miza beschikbaar. Overweeg een update uit te voeren als u:",
     "reasonFeatures": "Toegang wilt tot de nieuwste functies en verbeteringen",
     "reasonBugs": "Ondervindt problemen die mogelijk in de nieuwe versie worden opgelost",
     "releaseNotesHintBefore": "Wij raden u aan de",
@@ -2732,7 +2732,7 @@
       }
     },
     "title": "Agents",
-    "subtitle": "Bouw gespreksassistenten bovenop uw Securo-gegevens. Elke agent kan zijn eigen kennisbank, tools en provider hebben.",
+    "subtitle": "Bouw gespreksassistenten bovenop uw Miza-gegevens. Elke agent kan zijn eigen kennisbank, tools en provider hebben.",
     "newAgent": "Nieuwe agent",
     "newConversation": "Nieuw gesprek",
     "conversationsCount": "Gesprekken",
@@ -2923,14 +2923,14 @@
     },
     "mcpExternal": {
       "title": "Externe MCP-toegang",
-      "subtitle": "Sluit een externe agent (Claude Desktop, ChatGPT, n8n, een aangepaste client) aan op de ingebouwde MCP-server van Securo. Het onderstaande token is bedoeld voor uw gebruiker en verloopt over {{days}} dagen.",
+      "subtitle": "Sluit een externe agent (Claude Desktop, ChatGPT, n8n, een aangepaste client) aan op de ingebouwde MCP-server van Miza. Het onderstaande token is bedoeld voor uw gebruiker en verloopt over {{days}} dagen.",
       "copy": "Kopieer",
       "copied": "Gekopieerd",
       "copyFailed": "Kopiëren mislukt",
       "mint": "Token genereren",
       "minting": "Genereren…",
       "mintFailed": "Kan token niet verdienen",
-      "warning": "Kopieer nu — Securo slaat het token niet op, dus we kunnen het niet opnieuw tonen. Intrekken door AGENTS_MCP_JWT_SECRET te roteren.",
+      "warning": "Kopieer nu — Miza slaat het token niet op, dus we kunnen het niet opnieuw tonen. Intrekken door AGENTS_MCP_JWT_SECRET te roteren.",
       "regenerate": "Genereer een andere",
       "snippets": {
         "token": "Token",
@@ -2982,7 +2982,7 @@
       "optional": "optioneel",
       "empty": {
         "title": "Nog geen verbindingen",
-        "subtitle": "Voeg een verbinding toe om Securo te richten op uw lokale Ollama, OpenAI, Anthropic of een ander OpenAI-compatibel endpoint."
+        "subtitle": "Voeg een verbinding toe om Miza te richten op uw lokale Ollama, OpenAI, Anthropic of een ander OpenAI-compatibel endpoint."
       }
     }
   },
@@ -3341,7 +3341,7 @@
     "viewSource": "Broncode bekijken",
     "revoked": "Ingetrokken",
     "unavailable": "Niet beschikbaar",
-    "needsVersion": "Vereist Securo {{version}}",
+    "needsVersion": "Vereist Miza {{version}}",
     "updateAvailable": "Update beschikbaar",
     "installed": "Geïnstalleerd",
     "install": "Installeren",
@@ -3387,11 +3387,11 @@
       "defaults_other": "Maakt ook {{count}} standaardcategorieën die de regels nodig hebben",
       "themes": "Voegt thema's toe aan de bibliotheek: {{names}}",
       "themesRemove": "Haalt deze thema's uit de bibliotheek: {{names}}",
-      "themeInUse": "Je gebruikt {{name}}: je gaat terug naar het thema van Securo."
+      "themeInUse": "Je gebruikt {{name}}: je gaat terug naar het thema van Miza."
     },
     "page": {
       "section": "Catalogus",
-      "notice": "Plugins worden niet door Securo beoordeeld. Voordat er iets wordt toegepast zie je precies wat er verandert, en niets verlaat je server.",
+      "notice": "Plugins worden niet door Miza beoordeeld. Voordat er iets wordt toegepast zie je precies wat er verandert, en niets verlaat je server.",
       "search": "Plugins zoeken",
       "type": {
         "data": "Gegevens",
@@ -3462,7 +3462,7 @@
       "insideHint": "Alles wat deze plugin aan een workspace toevoegt. Bij installatie zie je wat je al hebt.",
       "noReadme": "De auteur heeft nog geen README voor deze plugin geschreven.",
       "loadFailed": "De plugindetails konden niet worden geladen.",
-      "contentsUnavailable": "Deze versie van Securo kan de inhoud van deze plugin niet tonen.",
+      "contentsUnavailable": "Deze versie van Miza kan de inhoud van deze plugin niet tonen.",
       "version": "Versie",
       "license": "Licentie",
       "requires": "Vereist",
@@ -3486,7 +3486,7 @@
       "remove": "Geen van de items staat hier nog; verwijderen haalt het alleen van de lijst."
     },
     "code": {
-      "runsCode": "Deze plugin voert code uit op je server, afgeschermd van Securo en je gegevens. Plugins worden niet door Securo gecontroleerd: installeer alleen code die je vertrouwt.",
+      "runsCode": "Deze plugin voert code uit op je server, afgeschermd van Miza en je gegevens. Plugins worden niet door Miza gecontroleerd: installeer alleen code die je vertrouwt.",
       "network": "Bereikt",
       "noNetwork": "Niets: er verlaten geen gegevens je server.",
       "access": "Gebruikt in deze werkruimte",
@@ -3523,7 +3523,7 @@
         "remove": "De code draait niet meer in deze werkruimte."
       },
       "provides": "Synchroniseert als een gekoppelde bank",
-      "providesHint": "Securo voegt deze gegevens aan deze werkruimte toe en houdt ze bij, zoals bij een gekoppelde bank. Elke koppeling staat onder Bankverbindingen.",
+      "providesHint": "Miza voegt deze gegevens aan deze werkruimte toe en houdt ze bij, zoals bij een gekoppelde bank. Elke koppeling staat onder Bankverbindingen.",
       "kinds": {
         "accounts": "Rekeningen",
         "transactions": "transacties",
@@ -3577,7 +3577,7 @@
     },
     "oauth": {
       "title": "Inloggen afronden",
-      "wait": "Securo slaat de koppeling op. Dit duurt even.",
+      "wait": "Miza slaat de koppeling op. Dit duurt even.",
       "connected": "{{name}} gekoppeld",
       "failed": "Het inloggen kon niet worden afgerond. Probeer het opnieuw.",
       "missing": "De dienst gaf het inloggen niet terug. Probeer het opnieuw.",
@@ -3588,7 +3588,7 @@
   },
   "library": {
     "title": "Bibliotheek",
-    "subtitle": "Kies wat het dashboard en de rapporten tonen, en hoe Securo eruitziet.",
+    "subtitle": "Kies wat het dashboard en de rapporten tonen, en hoe Miza eruitziet.",
     "kind": {
       "widgets": "Widgets",
       "reports": "Rapporten",
@@ -3612,7 +3612,7 @@
     "remove": "Verwijderen",
     "add": "Toevoegen",
     "theme": {
-      "securo": "Securo",
+      "Miza": "Miza",
       "ocean": "Oceaan",
       "forest": "Bos",
       "sunset": "Zonsondergang",
