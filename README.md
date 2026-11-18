@@ -34,7 +34,7 @@ docker compose up --build
 Ouvrir [http://localhost:3000](http://localhost:3000) et créer un compte. C'est tout.
 
 <p align="center">
-  <img src="docs/screenshot.png" width="800" alt="Miza dashboard" />
+  <img src="C:\Users\MSI\Pictures\Screenshots/testcap.png" width="800" alt="Miza dashboard" />
 </p>
 
 ## Fonctionnalités
