@@ -1,0 +1,1971 @@
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { loadReportsRange, saveReportsRange, type ReportsRange } from '@/lib/remembered-range'
+import { useTranslation } from 'react-i18next'
+import { useDateLocale, useDisplayLocale } from '@/hooks/use-display-locale'
+import { useQuery } from '@tanstack/react-query'
+import {
+  AreaChart,
+  Area,
+  Bar,
+  ComposedChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ReferenceLine,
+  Rectangle,
+  ResponsiveContainer,
+  type BarShapeProps,
+} from 'recharts'
+import { AlertCircle, CalendarDays, ChevronLeft, ChevronRight, HelpCircle, LibraryBig, X } from 'lucide-react'
+import { useLayout } from '@/hooks/use-layout'
+import { useLibrary } from '@/contexts/library-context'
+import { reports } from '@/lib/api'
+import { extractApiError } from '@/lib/api-errors'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
+import { DateRangePicker } from '@/components/ui/date-range-picker'
+import { PageHeader } from '@/components/page-header'
+import { CashflowSankey } from '@/components/reports/CashflowSankey'
+import { IncomeExpenseStatement, StatementControls } from '@/components/reports/IncomeExpenseStatement'
+import { loadStatementSettings, saveStatementSettings, type StatementSettings } from '@/lib/category-statement'
+import { currentMonth } from '@/lib/month-utils'
+import { usePrivacyMode } from '@/hooks/use-privacy-mode'
+import { useAuth } from '@/contexts/auth-context'
+import { useCollectionFilter } from '@/contexts/collection-filter-context'
+import type { ReportResponse, CategoryTrendItem } from '@/types'
+import { formatCompactCurrency, formatCurrency, ltrAmount } from '@/lib/format'
+import { cashFlowBar, cashFlowTopSeries } from '@/lib/cash-flow-bars'
+import { localDateString, todayInTimezone } from '@/lib/date-utils'
+import { monthLabel } from '@/lib/month-utils'
+import { periodWindow, windowMonths, type PeriodPreset } from '@/lib/report-period'
+import { useEffectiveTimezone } from '@/hooks/use-timezone'
+import { WorkspaceContext } from '@/contexts/workspace-context'
+import {
+  formatNetWorthAxisTick,
+  getNetWorthDomain,
+  shouldFillNetWorthArea,
+} from '@/lib/net-worth-chart-utils'
+
+// A small qualitative palette of well-separated hues for the composition
+// detail ring. Capped to a handful of slices, distinct colours make each
+// holding easy to match against its legend entry (which a same-hue ramp
+// across 15+ near-identical slices never could).
+// Twelve distinct series colors from the theme (index.css), so a theme
+// recolors every chart without the chart knowing.
+const SLICE_COLORS = Array.from({ length: 12 }, (_, i) => `var(--chart-${i + 1})`)
+const OTHER_SLICE_COLOR = 'var(--chart-muted)'
+// Money in and out keep the theme's colors in the bars and in their legend;
+// projections are a lighter shade of the same color.
+const SERIES_COLORS: Record<string, string> = {
+  income: 'var(--chart-income)',
+  expenses: 'var(--chart-expense)',
+  projectedIncome: 'color-mix(in srgb, var(--chart-income), white 30%)',
+  projectedExpenses: 'color-mix(in srgb, var(--chart-expense), white 30%)',
+  netIncome: 'var(--chart-1)',
+}
+
+/** "Apr 2026" from a YYYY-MM-DD date, in the date locale. */
+function formatShortMonth(isoDate: string, locale: string) {
+  const [y, m] = isoDate.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString(locale, { month: 'short', year: 'numeric' })
+}
+
+
+
+// `days` (when set) asks for an exact rolling window ending today rather than
+// the month-aligned window `months` produces. `monthAnchor` marks the month
+// presets (This Month / Last Month), which always send explicit dates.
+type RangeOption = { key: string; months: number; period?: 'ytd'; days?: number; monthAnchor?: number }
+
+const HISTORICAL_RANGE_OPTIONS: readonly RangeOption[] = [
+  { key: 'this_month', months: 1, monthAnchor: 0 },
+  { key: 'last_month', months: 1, monthAnchor: -1 },
+  { key: '6m', months: 6 },
+  { key: 'ytd', months: 12, period: 'ytd' },
+  { key: '1y', months: 12 },
+  { key: '2y', months: 24 },
+]
+
+const FORWARD_RANGE_OPTIONS: readonly RangeOption[] = [
+  { key: '3m', months: 3 },
+  { key: '6m', months: 6 },
+  { key: '12m', months: 12 },
+]
+
+// The Money Map answers "where did my money go lately", so it leans on recent
+// windows (down to 30 days) and drops the 2Y trend view the other tabs keep.
+const MONEY_MAP_RANGE_OPTIONS: readonly RangeOption[] = [
+  { key: 'this_month', months: 1, monthAnchor: 0 },
+  { key: 'last_month', months: 1, monthAnchor: -1 },
+  { key: '30d', months: 1, days: 30 },
+  { key: '3m', months: 3 },
+  { key: '6m', months: 6 },
+  { key: 'ytd', months: 12, period: 'ytd' },
+  { key: '1y', months: 12 },
+]
+
+const HISTORICAL_INTERVAL_OPTIONS = [
+  { key: 'daily', value: 'daily' },
+  { key: 'weekly', value: 'weekly' },
+  { key: 'monthly', value: 'monthly' },
+  { key: 'yearly', value: 'yearly' },
+] as const
+
+const CASH_FLOW_INTERVAL_OPTIONS = [
+  { key: 'daily', value: 'daily' },
+  { key: 'weekly', value: 'weekly' },
+  { key: 'monthly', value: 'monthly' },
+] as const
+
+const INTERVAL_LABELS: Record<string, string> = {
+  daily: 'intervalDaily',
+  weekly: 'intervalWeekly',
+  monthly: 'intervalMonthly',
+  yearly: 'intervalYearly',
+}
+
+const RANGE_LABELS: Record<string, string> = {
+  '30d': 'range30d',
+  '3m': 'range3m',
+  '6m': 'range6m',
+  '1y': 'range1y',
+  ytd: 'rangeYtd',
+  '12m': 'range12m',
+  '2y': 'range2y',
+  this_month: 'rangeThisMonth',
+  last_month: 'rangeLastMonth',
+  custom: 'customRange',
+}
+
+// Sentinel key for the "custom range" preset. Kept out of the preset arrays
+// above so we can decide per-tab whether it's actually offered (cash flow,
+// which is a forecast, still uses forward-only presets).
+const CUSTOM_RANGE_KEY = 'custom'
+
+// Mirrors the backend's `_MAX_CUSTOM_RANGE_YEARS` (backend/app/api/reports.py)
+// so a too-wide pick is rejected in the picker instead of round-tripping to
+// the API for the same 422. A calendar-year anniversary, not a fixed day
+// count, so leap days inside the window can't push the cap past 10 years.
+const CUSTOM_RANGE_MAX_YEARS = 10
+
+// Seed a historical draft from January 1 through today; Apply commits it.
+function defaultCustomRange(): { from: string; to: string } {
+  const today = new Date()
+  return { from: `${today.getFullYear()}-01-01`, to: localDateString(today) }
+}
+
+interface ReportTab {
+  key: string
+  labelKey: string
+  enabled: boolean
+  rangeOptions: readonly RangeOption[]
+  intervalOptions: readonly { key: string; value: string }[]
+  /** Cash flow is a forward-only forecast, so it's the only tab that can't offer a past-only calendar range. */
+  supportsCustomRange: boolean
+  /** Preset selected when switching to this tab drops the current preset, or when Reset+Apply clears a custom range on it. */
+  fallbackRangeKey: string
+  fallbackInterval: string
+}
+
+const REPORT_TABS: ReportTab[] = [
+  {
+    key: 'net_worth', labelKey: 'reports.netWorth', enabled: true,
+    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
+  },
+  {
+    key: 'income_expenses', labelKey: 'reports.incomeExpenses', enabled: true,
+    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
+  },
+  {
+    key: 'cash_flow', labelKey: 'reports.cashFlow', enabled: true,
+    rangeOptions: FORWARD_RANGE_OPTIONS, intervalOptions: CASH_FLOW_INTERVAL_OPTIONS,
+    supportsCustomRange: false, fallbackRangeKey: '6m', fallbackInterval: 'daily',
+  },
+  {
+    key: 'money_map', labelKey: 'reports.moneyMap', enabled: true,
+    rangeOptions: MONEY_MAP_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    supportsCustomRange: true, fallbackRangeKey: '3m', fallbackInterval: 'monthly',
+  },  // Month-by-month table with its own month and column controls; the range
+  // and interval presets above don't apply to it.
+  {
+    key: 'statement', labelKey: 'reports.statement', enabled: true,
+    rangeOptions: HISTORICAL_RANGE_OPTIONS, intervalOptions: HISTORICAL_INTERVAL_OPTIONS,
+    supportsCustomRange: true, fallbackRangeKey: '1y', fallbackInterval: 'monthly',
+  },
+]
+
+/** The range last used on `tab`, if it is still one the tab offers. */
+function storedReportsRange(tab: ReportTab): ReportsRange | null {
+  const stored = loadReportsRange(tab.key)
+  if (!stored) return null
+  const isCustom = stored.rangeKey === CUSTOM_RANGE_KEY
+  const rangeOk = isCustom
+    ? tab.supportsCustomRange && !!stored.from && !!stored.to
+    : tab.rangeOptions.some((r) => r.key === stored.rangeKey)
+  if (!rangeOk) return null
+  const interval = tab.intervalOptions.some((i) => i.value === stored.interval)
+    ? stored.interval
+    : tab.fallbackInterval
+  return { ...stored, interval, ...(isCustom ? {} : { from: '', to: '' }) }
+}
+
+export default function ReportsPage() {
+  const timeZone = useEffectiveTimezone()
+  // Read through the context object so the page still renders outside a
+  // WorkspaceProvider. Mirrors the backend's financial year start (April for
+  // India, January elsewhere), so stepping back from YTD lands on whole
+  // financial years.
+  const workspaceCtx = useContext(WorkspaceContext)
+  const fyStartMonth = (workspaceCtx?.current?.tax_jurisdiction ?? '').toUpperCase() === 'IN' ? 4 : 1
+  const { t, i18n } = useTranslation()
+  const isRtl = i18n.dir(i18n.language) === 'rtl'
+  const { mask, privacyMode, MASK } = usePrivacyMode()
+  const { user } = useAuth()
+  const userCurrency = user?.preferences?.currency_display ?? 'USD'
+  const locale = useDisplayLocale()
+  // Month and day words follow the app language, not the currency locale: a
+  // Portuguese UI showing US dollars still reads "Setembro de 2026".
+  const dateLocale = useDateLocale()
+
+  const customDefaults = defaultCustomRange()
+  // The reports this person keeps, in their order (all four by default).
+  const reportsLayout = useLayout('reports')
+  const { openLibrary } = useLibrary()
+  const shownTabs = useMemo(() => {
+    const tabs = reportsLayout.ids
+      .map((id) => REPORT_TABS.find((tab) => tab.key === id))
+      .filter((tab): tab is ReportTab => tab !== undefined)
+    return tabs.length > 0 ? tabs : REPORT_TABS
+  }, [reportsLayout.ids])
+  // The page opens on the first tab with the range last used there (issue
+  // #1053), or that tab's defaults if what was stored doesn't apply to it.
+  const [initialRange] = useState<ReportsRange>(() => storedReportsRange(shownTabs[0]) ?? {
+    rangeKey: shownTabs[0].fallbackRangeKey,
+    from: '',
+    to: '',
+    interval: shownTabs[0].fallbackInterval,
+  })
+  const [rangeKey, setRangeKey] = useState(initialRange.rangeKey)
+  const [interval, setInterval] = useState(initialRange.interval)
+  // Custom range endpoints (YYYY-MM-DD) — populated when the user opens the
+  // Custom preset and confirms a date range. Preserved across tab switches
+  // that still support custom ranges so the picker doesn't forget its
+  // selection while the user compares views.
+  const [customFrom, setCustomFrom] = useState(initialRange.from)
+  const [customTo, setCustomTo] = useState(initialRange.to)
+  // Period navigation (issue #519): how many periods of the active preset the
+  // window has been stepped back. 0 means the window still ends today.
+  const [periodOffset, setPeriodOffset] = useState(initialRange.periodOffset ?? 0)
+  const [activeTab, setActiveTab] = useState(shownTabs[0].key)
+  // Each tab keeps its own range: Cash Flow clamping to its forward presets
+  // must not overwrite what Net Worth was showing.
+  useEffect(() => {
+    saveReportsRange(activeTab, { rangeKey, from: customFrom, to: customTo, interval, periodOffset })
+  }, [activeTab, rangeKey, customFrom, customTo, interval, periodOffset])
+  const [compositionView, setCompositionView] = useState<string>('netWorth')
+  const [sparklineView, setSparklineView] = useState<'byExpenses' | 'byIncome'>('byExpenses')
+  const [sparklinePage, setSparklinePage] = useState(0)
+  const [cashFlowBaseline, setCashFlowBaseline] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [statementMonth, setStatementMonth] = useState(currentMonth)
+  const [statementSettings, setStatementSettings] = useState(loadStatementSettings)
+  const updateStatementSettings = (next: StatementSettings) => {
+    setStatementSettings(next)
+    saveStatementSettings(next)
+  }
+  // Active Collection filter (issue #105): scope all report tabs to its
+  // accounts; net worth also includes the collection's wallets' assets.
+  const { activeAccountIds, activeWalletIds } = useCollectionFilter()
+  const acctIds = activeAccountIds ?? undefined
+  const walletIds = activeWalletIds ?? undefined
+  // Wallet-only collection (active, zero accounts): the account-based reports
+  // (income/expenses, cash flow) have no data — only net worth (which includes
+  // the wallets' assets) is meaningful.
+  const noAccounts = activeAccountIds !== null && activeAccountIds.length === 0
+
+  const currentTab = REPORT_TABS.find((tab) => tab.key === activeTab) ?? REPORT_TABS[0]
+
+  const isCashFlow = activeTab === 'cash_flow'
+  // The Money Map (Sankey) tab is driven by the same income/expenses
+  // composition, aggregated over the selected historical range.
+  const isMoneyMap = activeTab === 'money_map'
+  const isStatement = activeTab === 'statement'
+  const rangeOptions = currentTab.rangeOptions
+  // Cash flow's forecast presets don't make sense with a past-only calendar
+  // range, so custom is only offered for the historical tabs (Net Worth,
+  // Income vs Expenses, Money Map).
+  const supportsCustomRange = currentTab.supportsCustomRange
+  const intervalOptions = currentTab.intervalOptions
+  const isCustomRange = supportsCustomRange && rangeKey === CUSTOM_RANGE_KEY
+  const hasCustomRange = isCustomRange && !!customFrom && !!customTo
+  const selectedRange = rangeOptions.find((r) => r.key === rangeKey) ?? rangeOptions[0]
+  // Period navigation (issue #519): a nonzero offset re-sends the same window
+  // stepped back by its own length, as explicit start/end dates. At offset 0
+  // the presets keep the API's `months` / `period` / `days` anchoring, so
+  // existing behavior and cache keys are untouched.
+  const periodPreset: PeriodPreset = isCustomRange
+    ? { kind: 'custom' }
+    : selectedRange.monthAnchor !== undefined
+      ? { kind: 'month', anchorDelta: selectedRange.monthAnchor }
+      : selectedRange.period === 'ytd'
+        ? { kind: 'ytd', fyStartMonth }
+        : selectedRange.days
+          ? { kind: 'days', days: selectedRange.days }
+          : { kind: 'rolling', months: selectedRange.months }
+  // Cash Flow is a forward projection with no period navigation: it never
+  // takes a stepped window, even if an offset was carried over from another tab.
+  const navWindow = isCashFlow
+    ? null
+    : periodWindow(periodPreset, todayInTimezone(timeZone), periodOffset, { from: customFrom, to: customTo })
+  // In custom mode, translate the picked span into an equivalent `months`
+  // value so downstream logic (interval bucketing, forecast fan-out) keeps
+  // working. Backend uses start_date/end_date directly when they're set.
+  const customMonths = hasCustomRange
+    ? Math.max(
+        1,
+        Math.min(
+          24,
+          Math.ceil(
+            (new Date(customTo + 'T00:00:00').getTime() -
+              new Date(customFrom + 'T00:00:00').getTime()) /
+              (1000 * 60 * 60 * 24 * 30),
+          ),
+        ),
+      )
+    : selectedRange.months
+  const months = navWindow ? windowMonths(navWindow) : isCustomRange ? customMonths : selectedRange.months
+  const period = navWindow || isCustomRange ? undefined : selectedRange.period
+  const days = navWindow || isCustomRange ? undefined : selectedRange.days
+  const apiStart = navWindow ? navWindow.from : hasCustomRange ? customFrom : undefined
+  const apiEnd = navWindow ? navWindow.to : hasCustomRange ? customTo : undefined
+  // Label for the period being viewed: the month name for the month presets,
+  // the covered span when the window has been stepped back or is custom, and
+  // the preset's own name while the window still ends today.
+  const activeWindow = navWindow ?? (hasCustomRange ? { from: customFrom, to: customTo } : null)
+  const periodLabel =
+    isCustomRange && !activeWindow
+      ? t('reports.customRange')
+      : activeWindow && selectedRange.monthAnchor !== undefined
+        ? monthLabel(activeWindow.from.slice(0, 7), dateLocale)
+        : activeWindow
+          ? `${formatShortMonth(activeWindow.from, dateLocale)} - ${formatShortMonth(activeWindow.to, dateLocale)}`
+          : t(`reports.${RANGE_LABELS[selectedRange.key]}`)
+
+  const handleSelectTab = (key: string) => {
+    const nextTab = REPORT_TABS.find((tab) => tab.key === key) ?? REPORT_TABS[0]
+    setActiveTab(key)
+    setCompositionView(key === 'net_worth' ? 'netWorth' : 'net')
+    setSparklinePage(0)
+    setSelectedDate(null)
+    const remembered = storedReportsRange(nextTab)
+    if (remembered) {
+      setRangeKey(remembered.rangeKey)
+      setInterval(remembered.interval)
+      setPeriodOffset(nextTab.key === 'cash_flow' ? 0 : (remembered.periodOffset ?? 0))
+      if (remembered.rangeKey === CUSTOM_RANGE_KEY) {
+        setCustomFrom(remembered.from)
+        setCustomTo(remembered.to)
+      }
+      return
+    }
+    // Clamp the range/interval preset to what the new tab supports.
+    const stillValid =
+      (rangeKey === CUSTOM_RANGE_KEY && nextTab.supportsCustomRange) ||
+      nextTab.rangeOptions.some((r) => r.key === rangeKey)
+    if (!stillValid) {
+      setRangeKey(nextTab.fallbackRangeKey)
+      setPeriodOffset(0)
+    } else if (nextTab.key === 'cash_flow') {
+      setPeriodOffset(0)
+    }
+    if (!nextTab.intervalOptions.some((i) => i.value === interval)) {
+      setInterval(nextTab.fallbackInterval)
+    }
+  }
+
+  // The page opens on the first report someone kept, once their list is in
+  // (unless they already picked a tab), and a report taken out of the page
+  // hands over to the first one left.
+  const firstShown = shownTabs[0].key
+  const activeShown = shownTabs.some((tab) => tab.key === activeTab)
+  const openedOnLayout = useRef(false)
+  useEffect(() => {
+    if (!reportsLayout.ready) return
+    if (!openedOnLayout.current) {
+      openedOnLayout.current = true
+      if (activeTab !== firstShown) handleSelectTab(firstShown)
+      return
+    }
+    if (!activeShown) handleSelectTab(firstShown)
+    // handleSelectTab and activeTab change each render; what matters is the list and whether the active tab is on it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportsLayout.ready, activeShown, firstShown])
+
+  // Year picker (issue #765): one entry per year the workspace's data
+  // covers, from this year back to the oldest transaction. Hidden until the
+  // data spans at least two years, and never on Cash Flow, which has no
+  // custom range a picked year can be committed into.
+  const { data: dataRange } = useQuery({
+    queryKey: ['reports', 'data-range'],
+    queryFn: reports.dataRange,
+    staleTime: 5 * 60 * 1000,
+  })
+  const todayStr = todayInTimezone(timeZone)
+  const currentYear = Number(todayStr.slice(0, 4))
+  const minYear = dataRange?.min_date ? Number(dataRange.min_date.slice(0, 4)) : null
+  const yearOptions =
+    minYear !== null && minYear < currentYear
+      ? Array.from({ length: currentYear - minYear + 1 }, (_, i) => currentYear - i)
+      : []
+  // The year a committed custom range covers exactly: Jan 1 through
+  // Dec 31, or through today for the current year.
+  const activeYear = yearOptions.find(
+    (year) =>
+      isCustomRange &&
+      customFrom === `${year}-01-01` &&
+      customTo === (year === currentYear ? todayStr : `${year}-12-31`),
+  )
+  const handleYearPick = (year: number) => {
+    setCustomFrom(`${year}-01-01`)
+    setCustomTo(year === currentYear ? todayStr : `${year}-12-31`)
+    setRangeKey(CUSTOM_RANGE_KEY)
+    setPeriodOffset(0)
+    setSelectedDate(null)
+  }
+
+  const { data, isLoading: reportLoading, isError, error, refetch } = useQuery<ReportResponse>({
+    queryKey: ['reports', activeTab, rangeKey, months, period ?? null, days ?? null, interval, isCashFlow ? cashFlowBaseline : false, activeAccountIds, activeWalletIds, apiStart ?? null, apiEnd ?? null],
+    queryFn: () =>
+      isCashFlow
+        ? reports.cashFlow(months, interval, cashFlowBaseline, acctIds)
+        : activeTab === 'income_expenses' || isMoneyMap
+          ? reports.incomeExpenses(months, interval, acctIds, period, days, apiStart, apiEnd)
+          : reports.netWorth(months, interval, acctIds, walletIds, period, apiStart, apiEnd),
+    // Only request a custom report with both committed endpoints.
+    enabled: currentTab.enabled && reportsLayout.ready && activeShown && !isStatement && !(noAccounts && activeTab !== 'net_worth') && (!isCustomRange || hasCustomRange),
+  })
+
+  // Waiting on the saved list of reports counts as loading, not as an empty report.
+  const isLoading = reportLoading || !reportsLayout.ready
+
+  const summary = data?.summary
+  const trend = data?.trend ?? []
+  const meta = data?.meta
+
+  // For cash flow we split the line at `forecast_start_date` so the past
+  // section renders solid and the forward projection renders dashed.
+  // The boundary point is duplicated in both series so the line visually
+  // connects without a gap.
+  const forecastStart = meta?.forecast_start_date ?? null
+  const NEGATIVE_SERIES = new Set(['liabilities'])
+
+  const chartData = trend.map((dp) => {
+    const isPast = forecastStart ? dp.date < forecastStart : false
+    const isBoundary = forecastStart ? dp.date === forecastStart : false
+    const breakdowns = meta?.type === 'net_worth'
+      ? Object.fromEntries(Object.entries(dp.breakdowns).map(([k, v]) => [k, NEGATIVE_SERIES.has(k) ? -v : v]))
+      : dp.breakdowns
+    return {
+      date: dp.date,
+      value: dp.value,
+      change: dp.change ?? null,
+      valuePast: isPast || isBoundary ? dp.value : null,
+      valueForecast: !isPast ? dp.value : null,
+      ...breakdowns,
+    } as Record<string, string | number | null> & { date: string }
+  })
+  // Cash-flow columns are drawn as ranges ending at net flow; see cashFlowBar.
+  type BarChartDatum = Record<string, string | number | null | [number, number]> & { date: string }
+  const barChartData: BarChartDatum[] = chartData.map((point): BarChartDatum =>
+    meta?.type === 'cash_flow' ? { ...point, ...cashFlowBar(point.inflow, point.outflow) } : point,
+  )
+  const netWorthDomain = getNetWorthDomain(
+    chartData
+      .map((point) => point.value)
+      .filter((value): value is number => typeof value === 'number'),
+  )
+
+  // Cash-flow runway: the first projected day below zero and the lowest
+  // point of the horizon, both computed day by day on the backend.
+  const runwayDate = meta?.type === 'cash_flow' ? meta.runway_date ?? null : null
+  const lowestBalance = meta?.type === 'cash_flow' ? meta.lowest_balance ?? null : null
+  const lowestBalanceDate = meta?.type === 'cash_flow' ? meta.lowest_balance_date ?? null : null
+  // The backend reports today as the runway date when the balance is already
+  // below zero, which is a different thing to say than "it will go negative".
+  // It reckons that day in the workspace's own timezone, so this has to as
+  // well: a browser already past midnight would otherwise call tomorrow's
+  // crossing a balance that is negative today.
+  const alreadyNegative = runwayDate !== null && runwayDate <= todayInTimezone(timeZone)
+  // Day and month are enough inside the current year; a longer horizon reaches
+  // into the next one, where the year stops being obvious.
+  const formatDay = (iso: string) => {
+    const day = new Date(iso + 'T00:00:00')
+    const sameYear = day.getFullYear() === new Date().getFullYear()
+    return day.toLocaleDateString(dateLocale, {
+      day: 'numeric',
+      month: 'short',
+      ...(sameYear ? {} : { year: 'numeric' }),
+    })
+  }
+
+  const allBreakdowns = summary?.breakdowns ?? []
+  const breakdownData = allBreakdowns.filter((b) => b.value > 0)
+
+  const colorMap: Record<string, string> = {}
+  for (const b of allBreakdowns) {
+    colorMap[b.key] = SERIES_COLORS[b.key] ?? b.color
+  }
+
+  const snapshotTrendPoint = selectedDate
+    ? (trend.find((dp) => dp.date === selectedDate) ?? null)
+    : null
+  const isHistoricalSnapshot =
+    snapshotTrendPoint !== null &&
+    selectedDate !== trend[trend.length - 1]?.date
+
+  const snapshotBreakdownData = snapshotTrendPoint
+    ? Object.entries(snapshotTrendPoint.breakdowns)
+        .map(([key, rawValue]) => {
+          const orig = allBreakdowns.find((b) => b.key === key)
+          return {
+            key,
+            label: orig?.label ?? key,
+            value: Math.abs(rawValue as number),
+            color: orig?.color ?? 'var(--chart-1)',
+          }
+        })
+        .filter((b) => b.value > 0)
+    : null
+
+  const compositionBreakdownData = snapshotBreakdownData ?? breakdownData
+
+  const changePrefix = (summary?.change_amount ?? 0) >= 0 ? '+' : ''
+  const changeColor = (summary?.change_amount ?? 0) >= 0 ? 'text-emerald-600' : 'text-rose-500'
+
+  const tooltipStyle = {
+    background: 'var(--card)',
+    color: 'var(--foreground)',
+    border: '1px solid var(--border)',
+    borderRadius: '0.75rem',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+    fontSize: '12px',
+  }
+
+  const composition = data?.composition ?? []
+
+  // Composition toggle options per report type
+  const compositionOptions = activeTab === 'net_worth'
+    ? ['netWorth', 'assetsAndAccounts', 'liabilities'] as const
+    : activeTab === 'income_expenses' || activeTab === 'cash_flow'
+      ? ['net', 'byIncome', 'byExpenses'] as const
+      : ['summary', 'detailed'] as const
+
+  // Which breakdown groups are visible in each toggle state. null = show all.
+  const activeCompositionGroups: Set<string> | null = (() => {
+    if (compositionView === 'assetsAndAccounts') return new Set(['accounts', 'assets'])
+    if (compositionView === 'liabilities') return new Set(['liabilities'])
+    if (compositionView === 'byIncome') return new Set(['income'])
+    if (compositionView === 'byExpenses') return new Set(['expenses'])
+    return null
+  })()
+
+
+  // Normalize a breakdown key to its composition group. Cash flow exposes its
+  // income/expense breakdowns under projected* keys, but composition items are
+  // tagged with the plain group, so the two must be reconciled to line up.
+  const groupOf = (key: string) =>
+    key === 'projectedIncome' ? 'income'
+      : key === 'projectedExpenses' ? 'expenses'
+        : key
+
+  // Inner ring — summary view (high-level breakdown), filtered by toggle state for net_worth
+  const innerDonutData = (() => {
+    const excludedKeys = new Set(['netIncome', 'startingBalance', 'endingBalance'])
+    return compositionBreakdownData
+      .filter((b) => !excludedKeys.has(b.key) && (!activeCompositionGroups || activeCompositionGroups.has(groupOf(b.key))))
+      .map((b) => ({
+        name: t(`reports.${b.key}`, { defaultValue: b.label }),
+        value: b.value,
+        color: colorMap[b.key] ?? b.color,
+      }))
+  })()
+
+  const activeComposition = snapshotTrendPoint?.composition ?? composition
+
+  // Build a stable key → color map from the full composition range (never the
+  // snapshot), sorted the same way compositionDetail sorts, so colors don't
+  // shift when switching between dates.
+  const netWorthColorMap = (() => {
+    const excludedKeys = new Set(['netIncome', 'startingBalance', 'endingBalance'])
+    const groupOrder = breakdownData
+      .filter((b) => !excludedKeys.has(b.key) && (!activeCompositionGroups || activeCompositionGroups.has(groupOf(b.key))))
+      .map((b) => groupOf(b.key))
+    const activeGroups = new Set(groupOrder)
+    const sorted = [...composition]
+      .filter((c) => activeGroups.has(c.group))
+      .sort((a, b) => {
+        const ga = groupOrder.indexOf(a.group)
+        const gb = groupOrder.indexOf(b.group)
+        if (ga !== gb) return ga - gb
+        return b.value - a.value
+      })
+    const map = new Map<string, string>()
+    sorted.forEach((c, i) => map.set(c.key, SLICE_COLORS[i % SLICE_COLORS.length]))
+    return map
+  })()
+
+  // Full detail — every holding in the active group(s), largest first, labelled
+  // and coloured. The donut draws only the top slice of this; the legend popover
+  // lists all of it. Net worth items get a distinct palette (the long tail falls
+  // back to the neutral colour); income/expense items keep the user's category colour.
+  const compositionDetail = (() => {
+    if (activeComposition.length === 0) return []
+
+    const excludedKeys = new Set(['netIncome', 'startingBalance', 'endingBalance'])
+    const activeGroups = new Set(
+      compositionBreakdownData
+        .filter((b) => !excludedKeys.has(b.key) && (!activeCompositionGroups || activeCompositionGroups.has(groupOf(b.key))))
+        .map((b) => groupOf(b.key))
+    )
+
+    const itemLabel = (c: { label: string; key: string; group: string }) => {
+      if (c.key === 'uncategorized') {
+        // Uncategorized income and uncategorized expenses are distinct buckets
+        // that share a label — qualify them by group so they don't look duplicated.
+        const g = c.group === 'income' ? t('reports.income')
+          : c.group === 'expenses' ? t('reports.expenses')
+          : null
+        return g ? `${t('reports.uncategorized')} · ${g}` : t('reports.uncategorized')
+      }
+      if (c.key === 'baseline') return t('reports.baseline')
+      return c.label
+    }
+
+    const groupOrder = compositionBreakdownData
+      .filter((b) => !excludedKeys.has(b.key) && (!activeCompositionGroups || activeCompositionGroups.has(groupOf(b.key))))
+      .map((b) => groupOf(b.key))
+
+    return activeComposition
+      .filter((c) => activeGroups.has(c.group))
+      .sort((a, b) => {
+        const ga = groupOrder.indexOf(a.group)
+        const gb = groupOrder.indexOf(b.group)
+        if (ga !== gb) return ga - gb
+        return b.value - a.value
+      })
+      .map((c) => ({
+        name: itemLabel(c),
+        value: c.value,
+        color: activeTab === 'net_worth' ? (netWorthColorMap.get(c.key) ?? OTHER_SLICE_COLOR) : c.color,
+        group: c.group,
+      }))
+  })()
+
+  // Outer ring — items above 3 % of total get their own slice; everything else
+  // per group folds into one "Other <Group>" slice. Outer arcs are anchored to
+  // inner ring values so per-item rounding never misaligns the two rings.
+  const outerDonutData = (() => {
+    if (compositionDetail.length === 0) return []
+
+    const excludedKeys = new Set(['netIncome', 'startingBalance', 'endingBalance'])
+    const innerGroups = [
+      ...new Set(
+        compositionBreakdownData
+          .filter((b) => !excludedKeys.has(b.key) && (!activeCompositionGroups || activeCompositionGroups.has(groupOf(b.key))))
+          .map((b) => groupOf(b.key))
+      ),
+    ]
+
+    const innerGroupValue = new Map<string, number>()
+    for (const b of compositionBreakdownData) {
+      if (!excludedKeys.has(b.key) && (!activeCompositionGroups || activeCompositionGroups.has(groupOf(b.key)))) {
+        const g = groupOf(b.key)
+        innerGroupValue.set(g, (innerGroupValue.get(g) ?? 0) + b.value)
+      }
+    }
+
+    const totalValue = [...innerGroupValue.values()].reduce((s, v) => s + v, 0)
+
+    const otherLabel = (g: string) =>
+      g === 'accounts' ? t('reports.otherAccounts')
+        : g === 'assets' ? t('reports.otherAssets')
+          : g === 'liabilities' ? t('reports.otherLiabilities')
+            : g === 'income' ? t('reports.otherIncome')
+              : g === 'expenses' ? t('reports.otherExpenses')
+                : t('reports.other')
+
+    const byGroup = new Map<string, typeof compositionDetail>()
+    for (const g of innerGroups) byGroup.set(g, [])
+    for (const item of compositionDetail) byGroup.get(item.group)?.push(item)
+
+    const result: {
+      name: string
+      value: number
+      color: string
+      children?: { name: string; value: number; color: string }[]
+    }[] = []
+
+    for (const g of innerGroups) {
+      const all = byGroup.get(g) ?? []
+      const significant = all.filter((item) => totalValue > 0 && item.value / totalValue >= 0.03)
+      const rest = all.filter((item) => totalValue <= 0 || item.value / totalValue < 0.03)
+      const topSum = significant.reduce((s, d) => s + d.value, 0)
+      const innerTotal = innerGroupValue.get(g) ?? topSum
+      const otherValue = Math.round((innerTotal - topSum) * 100) / 100
+      for (const item of significant) result.push(item)
+      if (otherValue > 0.005) {
+        if (rest.length === 1) {
+          result.push(rest[0])
+        } else {
+          result.push({
+            name: otherLabel(g),
+            value: otherValue,
+            color: OTHER_SLICE_COLOR,
+            children: rest.length > 0 ? rest : undefined,
+          })
+        }
+      }
+    }
+
+    return result
+  })()
+
+  return (
+    <div>
+      <PageHeader
+        section={t('reports.section')}
+        title={t(currentTab.labelKey)}
+        action={isStatement ? (
+          <StatementControls
+            month={statementMonth}
+            onMonthChange={setStatementMonth}
+            settings={statementSettings}
+            onSettingsChange={updateStatementSettings}
+          />
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            {isCashFlow && (
+              <div
+                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  cashFlowBaseline
+                    ? 'border-primary/40 bg-primary/10 text-primary'
+                    : 'border-border bg-card text-muted-foreground'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => setCashFlowBaseline((v) => !v)}
+                  className="flex items-center gap-2 hover:text-foreground transition-colors"
+                  aria-pressed={cashFlowBaseline}
+                >
+                  <span
+                    className={`relative inline-flex h-3.5 w-6 shrink-0 items-center rounded-full transition-colors ${
+                      cashFlowBaseline ? 'bg-primary' : 'bg-muted'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-2.5 w-2.5 transform rounded-full bg-white transition-transform ${
+                        cashFlowBaseline ? 'translate-x-3 rtl:-translate-x-3' : 'translate-x-0.5 rtl:-translate-x-0.5'
+                      }`}
+                    />
+                  </span>
+                  {t('reports.includeEstimate')}
+                </button>
+                <span
+                  title={t('reports.includeEstimateHelp')}
+                  aria-label={t('reports.includeEstimateHelp')}
+                  className="inline-flex cursor-help"
+                >
+                  <HelpCircle className="h-3.5 w-3.5 opacity-60" />
+                </span>
+              </div>
+            )}
+            <div className="flex items-center rounded-lg border border-border bg-card overflow-hidden">
+              {rangeOptions.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => { setRangeKey(opt.key); setPeriodOffset(0); setSelectedDate(null) }}
+                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    rangeKey === opt.key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {t(`reports.${RANGE_LABELS[opt.key]}`)}
+                </button>
+              ))}
+              {supportsCustomRange && (
+                <DateRangePicker
+                  variant="segment"
+                  active={isCustomRange}
+                  from={customFrom}
+                  to={customTo}
+                  defaultFrom={customDefaults.from}
+                  defaultTo={customDefaults.to}
+                  disallowFuture
+                  maxRangeYears={CUSTOM_RANGE_MAX_YEARS}
+                  onChange={(f, to) => {
+                    setCustomFrom(f)
+                    setCustomTo(to)
+                    setPeriodOffset(0)
+                    setRangeKey(f && to ? CUSTOM_RANGE_KEY : currentTab.fallbackRangeKey)
+                    setSelectedDate(null)
+                  }}
+                  label={t('reports.customRange')}
+                  placeholder={t('reports.pickCustomRange')}
+                />
+              )}
+              {supportsCustomRange && yearOptions.length > 1 && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={activeYear !== undefined ? `${t('reports.year')} ${activeYear}` : t('reports.year')}
+                      title={t('reports.yearPickerHelp')}
+                      className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        activeYear !== undefined
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                      }`}
+                    >
+                      <CalendarDays className="me-1 inline h-3.5 w-3.5" />
+                      {activeYear !== undefined ? activeYear : t('reports.year')}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-auto p-1">
+                    <div className="max-h-64 overflow-y-auto">
+                      {yearOptions.map((year) => (
+                        <button
+                          key={year}
+                          type="button"
+                          onClick={() => handleYearPick(year)}
+                          className={`block w-full px-3 py-1.5 text-start text-xs font-semibold transition-colors ${
+                            activeYear === year
+                              ? 'bg-primary text-primary-foreground'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                          }`}
+                        >
+                          {year}
+                        </button>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              )}
+            </div>
+            {/* Period navigation (issue #519): step the active window back and
+                forward through history, labeled with the period it shows. The
+                Cash Flow tab is a forward-only forecast, so it has no past to
+                step through. */}
+            {!isCashFlow && (
+              <div
+                className="flex items-center rounded-lg border border-border bg-card overflow-hidden"
+                data-testid="reports-period-nav"
+              >
+                <button
+                  type="button"
+                  aria-label={t('reports.periodPrev')}
+                  title={t('reports.periodPrev')}
+                  onClick={() => { setPeriodOffset((o) => o - 1); setSelectedDate(null) }}
+                  className="px-2 py-1.5 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/50"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="min-w-24 px-1 text-center text-xs font-semibold tabular-nums" data-testid="reports-period-label">
+                  {periodLabel}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t('reports.periodNext')}
+                  title={t('reports.periodNext')}
+                  disabled={periodOffset === 0}
+                  onClick={() => { setPeriodOffset((o) => o + 1); setSelectedDate(null) }}
+                  className="px-2 py-1.5 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted/50 disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            <div className={`flex items-center rounded-lg border border-border bg-card overflow-hidden ${isMoneyMap ? 'hidden' : ''}`}>
+              {intervalOptions.map((opt) => (
+                <button
+                  key={opt.key}
+                  onClick={() => { setInterval(opt.value); setSelectedDate(null) }}
+                  className={`px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                    interval === opt.value
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {t(`reports.${INTERVAL_LABELS[opt.key]}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      />
+
+      {/* Tab Bar */}
+      <div className="flex items-center gap-1 mb-5 border-b border-border overflow-x-auto">
+        {shownTabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => { if (tab.enabled) { openedOnLayout.current = true; handleSelectTab(tab.key) } }}
+            disabled={!tab.enabled}
+            className={`relative shrink-0 whitespace-nowrap px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === tab.key
+                ? 'text-foreground'
+                : tab.enabled
+                  ? 'text-muted-foreground hover:text-foreground'
+                  : 'text-muted-foreground/50 cursor-not-allowed'
+            }`}
+          >
+            {t(tab.labelKey)}
+            {!tab.enabled && (
+              <span className="ms-1.5 text-[10px] text-muted-foreground/50">
+                {t('reports.comingSoon')}
+              </span>
+            )}
+            {activeTab === tab.key && (
+              <span className="absolute bottom-0 start-0 end-0 h-0.5 bg-primary rounded-full" />
+            )}
+          </button>
+        ))}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ms-auto mb-1 h-8 shrink-0 gap-1.5 px-2 text-muted-foreground"
+          aria-label={t('library.manageReports')}
+          title={t('library.manageReports')}
+          onClick={() => openLibrary('reports')}
+        >
+          <LibraryBig size={15} />
+          <span className="hidden sm:inline">{t('library.manageReportsShort')}</span>
+        </Button>
+      </div>
+
+      {isStatement && (noAccounts ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">{t('reports.noData')}</p>
+      ) : (
+        <IncomeExpenseStatement accountIds={acctIds} month={statementMonth} settings={statementSettings} />
+      ))}
+
+      {!isStatement && isError && (
+        <div className="flex items-center justify-between gap-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-lg px-4 py-2.5 mb-5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertCircle size={16} className="shrink-0 text-rose-600 dark:text-rose-400" />
+            <span className="text-sm text-rose-900 dark:text-rose-200 truncate">
+              {extractApiError(error, t('reports.loadError'))}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="shrink-0 text-sm font-semibold text-rose-600 dark:text-rose-400 hover:underline"
+          >
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
+
+      {!isStatement && !isError && (
+      <>
+      {/* Hero Card */}
+      <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
+        <div className="px-5 py-4">
+          {isLoading ? (
+            <div className="flex items-center gap-8">
+              <Skeleton className="h-16 w-48" />
+              <div className="flex gap-6">
+                <Skeleton className="h-12 w-28" />
+                <Skeleton className="h-12 w-28" />
+                <Skeleton className="h-12 w-28" />
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-0.5 uppercase tracking-wider">
+                  {t(currentTab.labelKey)}
+                </p>
+                <div className="flex items-baseline gap-3">
+                  <p className="text-3xl font-bold tabular-nums text-foreground">
+                    {mask(formatCurrency(summary?.primary_value ?? 0, userCurrency, locale))}
+                  </p>
+                  {summary?.change_percent !== null && summary?.change_percent !== undefined && (
+                    <span className={`text-sm font-semibold tabular-nums ${changeColor}`}>
+                      {changePrefix}{summary.change_percent.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {mask(`${changePrefix}${formatCurrency(summary?.change_amount ?? 0, userCurrency, locale)}`)}
+                  {' '}{t(meta?.type === 'cash_flow' ? 'reports.vsToday' : 'reports.vsStart')}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-6">
+                {breakdownData.map((b) => (
+                  <div key={b.key} className="min-w-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <div
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: colorMap[b.key] ?? b.color }}
+                      />
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {t(`reports.${b.key}`, { defaultValue: b.label })}
+                      </p>
+                    </div>
+                    <p className="text-lg font-bold tabular-nums text-foreground">
+                      {mask(formatCurrency(b.value, userCurrency, locale))}
+                    </p>
+                  </div>
+                ))}
+                {/* Cash flow only: the lowest point of the projection. It keeps
+                    one permanent slot and lets the label and the colour carry
+                    the state, instead of a banner that comes and goes. */}
+                {lowestBalance !== null && lowestBalanceDate && (
+                  <div className="min-w-0" data-testid="cash-flow-runway">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <div
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 ${runwayDate ? 'bg-rose-500' : 'bg-muted-foreground/40'}`}
+                      />
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {!runwayDate
+                          ? t('reports.lowestBalance')
+                          : alreadyNegative
+                            ? t('reports.runwayAlreadyNegative')
+                            : t('reports.runwayNegativeOn', { date: formatDay(runwayDate) })}
+                      </p>
+                    </div>
+                    <p
+                      className={`text-lg font-bold tabular-nums ${runwayDate ? 'text-rose-600 dark:text-rose-400' : 'text-foreground'}`}
+                    >
+                      {mask(formatCurrency(lowestBalance, userCurrency, locale))}
+                      {/* The day the balance bottoms out, but only when the
+                          label is not already naming the day it crosses zero.
+                          Two dates side by side read as one fact, not two. */}
+                      {!runwayDate || alreadyNegative ? (
+                        <span className="ms-1.5 text-xs font-medium text-muted-foreground">
+                          {formatDay(lowestBalanceDate)}
+                        </span>
+                      ) : null}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Flow (Sankey) */}
+      {isMoneyMap && (
+        <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
+          <div className="px-5 pt-5 pb-2 flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">
+              {t('reports.moneyMap')}
+            </p>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--chart-income)' }} />
+                <span className="text-[11px] text-muted-foreground">{t('reports.income')}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--chart-expense)' }} />
+                <span className="text-[11px] text-muted-foreground">{t('reports.expenses')}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--chart-5)' }} />
+                <span className="text-[11px] text-muted-foreground">{t('reports.investments')}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--chart-2)' }} />
+                <span className="text-[11px] text-muted-foreground">{t('reports.deficit')}</span>
+              </div>
+            </div>
+          </div>
+          <div className="px-3 pb-5">
+            {isLoading ? (
+              <div className="px-2"><Skeleton className="h-[360px] w-full" /></div>
+            ) : (
+              <CashflowSankey composition={composition} currency={userCurrency} locale={locale} />
+            )}
+          </div>
+        </div>
+      )}
+
+      {!isMoneyMap && (
+      <>
+      {/* Main Trend Chart */}
+      <div className="bg-card rounded-xl border border-border shadow-sm mb-5">
+        <div className="px-5 pt-5 pb-2 flex items-center justify-between">
+          <p className="text-sm font-semibold text-foreground">
+            {t(currentTab.labelKey)} · {t('reports.trend')}
+          </p>
+          {meta && (
+            <div className="flex items-center gap-3">
+              {meta.type === 'net_worth' ? (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--chart-1)' }} />
+                  <span className="text-[11px] text-muted-foreground">
+                    {t('reports.netWorth')}
+                  </span>
+                </div>
+              ) : (
+                meta.series_keys.map((key) => (
+                  <div key={key} className="flex items-center gap-1.5">
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: colorMap[key] || 'var(--chart-1)' }}
+                    />
+                    <span className="text-[11px] text-muted-foreground">
+                      {t(`reports.${key}`, { defaultValue: key })}
+                    </span>
+                  </div>
+                ))
+              )}
+              {meta.type === 'income_expenses' && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0 border-t-2 border-dashed" style={{ borderColor: 'var(--chart-1)' }} />
+                  <span className="text-[11px] text-muted-foreground">
+                    {t('reports.netIncome')}
+                  </span>
+                </div>
+              )}
+              {meta.type === 'cash_flow' && (
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0 border-t-2 border-dashed" style={{ borderColor: 'var(--chart-1)' }} />
+                  <span className="text-[11px] text-muted-foreground">
+                    {meta.baseline_active ? t('reports.forecastBaseline') : t('reports.forecast')}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="px-1 pb-4" style={{ height: 320 }}>
+          {isLoading ? (
+            <div className="px-4">
+              <Skeleton className="h-full w-full" />
+            </div>
+          ) : chartData.length > 0 ? (
+            meta?.type === 'cash_flow' ? (() => {
+              const startingBalance = summary?.breakdowns.find((b) => b.key === 'startingBalance')?.value ?? 0
+              return (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="cashFlowGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      tickFormatter={(v) => {
+                        if (privacyMode) return ''
+                        if (v === 0) return '0'
+                        return formatCompactCurrency(v, userCurrency, locale)
+                      }}
+                      tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={64}
+                      tickCount={5}
+                    />
+                    <Tooltip
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload || payload.length === 0) return null
+                        const point = payload[0].payload as Record<string, number>
+                        const balance = point.value ?? 0
+                        const inflow = point.inflow ?? 0
+                        const outflow = point.outflow ?? 0
+                        return (
+                          <div style={tooltipStyle} className="px-3 py-2">
+                            <p className="text-xs font-medium mb-1">{label}</p>
+                            <p className="text-xs font-medium text-foreground">
+                              {t('reports.balance', { defaultValue: 'Balance' })}:{' '}
+                              {privacyMode ? MASK : formatCurrency(balance, userCurrency, locale)}
+                            </p>
+                            {inflow > 0 && (
+                              <p className="text-xs" style={{ color: 'var(--chart-income)' }}>
+                                {t('reports.inflow')}:{' '}
+                                {privacyMode ? MASK : ltrAmount(`+${formatCurrency(inflow, userCurrency, locale)}`)}
+                              </p>
+                            )}
+                            {outflow > 0 && (
+                              <p className="text-xs" style={{ color: 'var(--chart-expense)' }}>
+                                {t('reports.outflow')}:{' '}
+                                {privacyMode ? MASK : ltrAmount(`-${formatCurrency(outflow, userCurrency, locale)}`)}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      }}
+                    />
+                    <ReferenceLine
+                      y={startingBalance}
+                      stroke="var(--muted-foreground)"
+                      strokeDasharray="4 4"
+                      strokeOpacity={0.5}
+                    />
+                    {lowestBalance !== null && lowestBalance < 0 && (
+                      <ReferenceLine y={0} stroke="var(--chart-expense)" strokeOpacity={0.6} />
+                    )}
+                    {forecastStart && (
+                      <ReferenceLine
+                        x={forecastStart}
+                        stroke="var(--muted-foreground)"
+                        strokeDasharray="3 3"
+                        strokeOpacity={0.6}
+                        label={{
+                          value: t('reports.today'),
+                          position: 'insideTopRight',
+                          fill: 'var(--muted-foreground)',
+                          fontSize: 10,
+                        }}
+                      />
+                    )}
+                    <Area
+                      type="monotone"
+                      dataKey="valuePast"
+                      stroke="var(--chart-1)"
+                      strokeWidth={2.5}
+                      fill="url(#cashFlowGrad)"
+                      dot={false}
+                      activeDot={{ r: 4, fill: 'var(--chart-1)' }}
+                      isAnimationActive={false}
+                      connectNulls={false}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="valueForecast"
+                      stroke="var(--chart-1)"
+                      strokeWidth={2.5}
+                      strokeDasharray="6 3"
+                      fill="url(#cashFlowGrad)"
+                      fillOpacity={0.4}
+                      dot={false}
+                      activeDot={{ r: 4, fill: 'var(--chart-1)' }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )
+            })() : meta?.type === 'income_expenses' ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  tickFormatter={(v) => {
+                    if (privacyMode) return ''
+                    if (v === 0) return '0'
+                    return formatCompactCurrency(v, userCurrency, locale)
+                  }}
+                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={64}
+                  tickCount={5}
+                />
+                <Tooltip
+                  formatter={(value?: number, name?: string) => [
+                    privacyMode ? MASK : formatCurrency(value ?? 0, userCurrency, locale),
+                    name === 'value'
+                      ? t('reports.netIncome')
+                      : t(`reports.${name ?? ''}`, { defaultValue: name ?? '' }),
+                  ]}
+                  labelFormatter={(label) => label}
+                  contentStyle={tooltipStyle}
+                />
+                <ReferenceLine y={0} stroke="var(--border)" strokeDasharray="3 3" />
+                  <Bar dataKey="income" fill={SERIES_COLORS.income} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="expenses" fill={SERIES_COLORS.expenses} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                  <Bar dataKey="projectedIncome" fill={SERIES_COLORS.projectedIncome} radius={[4, 4, 0, 0]} maxBarSize={20} fillOpacity={0.65} />
+                  <Bar dataKey="projectedExpenses" fill={SERIES_COLORS.projectedExpenses} radius={[4, 4, 0, 0]} maxBarSize={20} fillOpacity={0.65} />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="var(--chart-1)"
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  dot={false}
+                  activeDot={{ r: 4, fill: 'var(--chart-1)' }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+            ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="netWorthGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  domain={netWorthDomain}
+                  tickFormatter={(v) => {
+                    if (privacyMode) return ''
+                    return formatNetWorthAxisTick(v, netWorthDomain, userCurrency, locale)
+                  }}
+                  tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={88}
+                  tickCount={5}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || payload.length === 0) return null
+                    const point = payload[0]?.payload as Record<string, number | null>
+                    const value = (payload[0]?.value as number) ?? 0
+                    const change = point.change ?? null
+                    const changeSign = change !== null && change >= 0 ? '+' : ''
+                    const changeColor = change !== null ? (change >= 0 ? 'var(--chart-income)' : 'var(--chart-expense)') : ''
+                    return (
+                      <div style={tooltipStyle} className="px-3 py-2">
+                        <p className="text-xs font-medium mb-1">{label}</p>
+                        <p className="text-xs font-medium text-foreground">
+                          {t(currentTab.labelKey)}:{' '}
+                          {privacyMode ? MASK : formatCurrency(value, userCurrency, locale)}
+                        </p>
+                        {change !== null && (
+                          <p className="text-xs" style={{ color: changeColor }}>
+                            {t('reports.change')}:{' '}
+                            {privacyMode ? MASK : `${changeSign}${formatCurrency(change, userCurrency, locale)}`}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="var(--chart-1)"
+                  strokeWidth={2.5}
+                  fill={shouldFillNetWorthArea(netWorthDomain) ? 'url(#netWorthGrad)' : 'none'}
+                  dot={false}
+                  activeDot={{ r: 4, fill: 'var(--chart-1)' }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+            )
+          ) : (
+            <p className="text-muted-foreground text-sm text-center py-16">
+              {t('reports.noData')}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Breakdown: Donut + Grouped Bar */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        {/* Composition widget — summary ring + ranked, labelled detail bars */}
+        <div className={`rounded-xl border shadow-sm transition-colors ${selectedDate ? 'bg-primary/5 border-primary/50' : 'bg-card border-border'}`}>
+          <div className="px-5 pt-4 pb-2 flex flex-col gap-2 min-[635px]:flex-row min-[635px]:items-start min-[635px]:justify-between lg:flex-col lg:items-start xl:flex-row xl:items-start xl:justify-between">
+            <div className="flex flex-col">
+              <p className="text-sm font-semibold text-foreground">{t('reports.composition')}</p>
+              {selectedDate && (
+                <span className="text-xs text-primary font-medium">{t('reports.asOf', { date: selectedDate })}</span>
+              )}
+            </div>
+            <div className="flex items-stretch rounded-lg border border-border bg-muted/30 overflow-hidden w-fit">
+              {compositionOptions.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setCompositionView(opt)}
+                  className={`px-2 py-1 text-[11px] font-semibold text-center transition-colors ${
+                    compositionView === opt
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {t(`reports.${opt}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="px-1 pb-4">
+            {isLoading ? (
+              <div className="flex flex-col items-center px-4 py-2">
+                <div className="relative" style={{ width: 200, height: 200 }}>
+                  <Skeleton className="w-full h-full rounded-full" />
+                  <div
+                    className="absolute flex flex-col items-center justify-center gap-1 rounded-full bg-card"
+                    style={{ width: 110, height: 110, top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                  >
+                    <Skeleton className="h-2 w-12" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                </div>
+                <div className="flex flex-wrap justify-center gap-x-3 gap-y-1.5 mt-3">
+                  {Array.from({ length: activeTab === 'net_worth' ? 3 : 2 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <Skeleton className="w-2 h-2 rounded-full shrink-0" />
+                      <Skeleton className="h-2 w-14" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : innerDonutData.length > 0 ? (
+                (() => {
+                  const hasOuter = outerDonutData.length > 0
+                  const donutTotal = innerDonutData.reduce((s, d) => s + d.value, 0)
+                  return (
+                    <div className="flex flex-col items-center">
+                      <div className="relative" style={{ width: 200, height: 200 }}>
+                        <PieChart width={200} height={200}>
+                            <Pie
+                              data={innerDonutData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={55}
+                              outerRadius={hasOuter ? 63 : 85}
+                              paddingAngle={hasOuter ? 0 : 3}
+                              dataKey="value"
+                              stroke="var(--card)"
+                              strokeWidth={hasOuter ? 2 : 0}
+                            >
+                              {innerDonutData.map((entry, idx) => (
+                                <Cell key={idx} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            {hasOuter && (
+                              <Pie
+                                data={outerDonutData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={64}
+                                outerRadius={90}
+                                paddingAngle={0}
+                                dataKey="value"
+                                stroke="var(--card)"
+                                strokeWidth={2}
+                              >
+                                {outerDonutData.map((entry, idx) => (
+                                  <Cell key={idx} fill={entry.color} />
+                                ))}
+                              </Pie>
+                            )}
+                            <Tooltip
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null
+                                const entry = payload[0]
+                                const v = (entry.value as number) ?? 0
+                                const pct = donutTotal > 0 ? ((v / donutTotal) * 100).toFixed(1) : '0'
+                                const rawName = (entry.name as string) ?? ''
+                                const displayName = rawName.length > 50 ? rawName.slice(0, 47) + '…' : rawName
+                                const children = (entry.payload as { children?: { name: string; value: number; color: string }[] }).children
+                                return (
+                                  <div style={{ ...tooltipStyle, padding: '8px 12px', zIndex: 10, maxWidth: 256 }}>
+                                    <p className="text-xs font-semibold mb-1">{displayName}</p>
+                                    <p className="text-xs">
+                                      {privacyMode ? MASK : `${formatCurrency(v, userCurrency, locale)} (${pct}%)`}
+                                    </p>
+                                    {children && children.length > 0 && (
+                                      <div className="mt-1.5 border-t border-border/50 pt-1.5 flex flex-col gap-0.5" style={{ maxHeight: 180, overflowY: 'auto', paddingRight: '0.5rem' }}>
+                                        {children.map((child, i) => {
+                                          const childPct = donutTotal > 0 ? ((child.value / donutTotal) * 100).toFixed(1) : '0'
+                                          return (
+                                            <div key={i} className="flex items-center justify-between gap-3">
+                                              <div className="flex items-center gap-1.5 min-w-0">
+                                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: child.color }} />
+                                                <span className="text-xs text-muted-foreground truncate">
+                                                  {child.name.length > 25 ? child.name.slice(0, 22) + '…' : child.name}
+                                                </span>
+                                              </div>
+                                              <span className="text-xs text-muted-foreground shrink-0">
+                                                {privacyMode ? MASK : `${formatCurrency(child.value, userCurrency, locale)} (${childPct}%)`}
+                                              </span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              }}
+                              wrapperStyle={{ zIndex: 10, pointerEvents: 'auto' }}
+                              offset={20}
+                            />
+                        </PieChart>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none" style={{ zIndex: 0 }}>
+                          <span className="text-[10px] text-muted-foreground">
+                            {compositionView === 'assetsAndAccounts'
+                              ? t(isHistoricalSnapshot ? 'reports.youOwned' : 'reports.youOwn', { defaultValue: isHistoricalSnapshot ? 'You Owned' : 'You Own' })
+                              : compositionView === 'liabilities'
+                                ? t(isHistoricalSnapshot ? 'reports.youOwed' : 'reports.youOwe', { defaultValue: isHistoricalSnapshot ? 'You Owed' : 'You Owe' })
+                                : compositionView === 'byIncome' ? t('reports.income')
+                                : compositionView === 'byExpenses' ? t('reports.expenses')
+                                : meta?.type === 'income_expenses' ? t('reports.netIncome')
+                                : t(currentTab.labelKey)}
+                          </span>
+                          <span className="text-base font-bold text-foreground tabular-nums">
+                            {mask(formatCompactCurrency(
+                              snapshotTrendPoint
+                                ? compositionView === 'netWorth' || compositionView === 'net' || !compositionView
+                                  ? snapshotTrendPoint.value
+                                  : innerDonutData.reduce((s, d) => s + d.value, 0)
+                                : compositionView === 'netWorth' || compositionView === 'net' || !compositionView
+                                  ? meta?.type === 'cash_flow'
+                                    ? (summary?.change_amount ?? 0)
+                                    : (summary?.primary_value ?? 0)
+                                  : innerDonutData.reduce((s, d) => s + d.value, 0),
+                              userCurrency, locale
+                            ))}
+                          </span>
+                        </div>
+                      </div>
+                      <div key={compositionView} className="flex flex-col items-center gap-1 px-3 mt-1 w-full">
+                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+                          {innerDonutData.map((d, i) => (
+                            <div key={`${i}-${d.name}`} className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                              <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                {d.name.length > 30 ? d.name.slice(0, 27) + '…' : d.name}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {hasOuter && (() => {
+                          const visible = outerDonutData.slice(0, 6)
+                          const hiddenCount = compositionDetail.length - visible.length
+                          return (
+                            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1 items-center">
+                              {visible.map((d, i) => (
+                                <div key={`${i}-${d.name}`} className="flex items-center gap-1.5">
+                                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                                    {d.name.length > 30 ? d.name.slice(0, 27) + '…' : d.name}
+                                  </span>
+                                </div>
+                              ))}
+                              {hiddenCount > 0 && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
+                                    >
+                                      +{hiddenCount} more
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent align="center" side="top" sideOffset={8} className="w-64 p-3">
+                                    <p className="text-xs font-semibold text-foreground mb-2">
+                                      {t('reports.composition')}
+                                    </p>
+                                    <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto pe-2">
+                                      {compositionDetail.map((d, i) => {
+                                        const pct = donutTotal > 0 ? ((d.value / donutTotal) * 100).toFixed(1) : '0'
+                                        return (
+                                          <div key={`${i}-${d.name}`} className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                                            <span className="text-[11px] text-muted-foreground flex-1 truncate">
+                                              {d.name.length > 25 ? d.name.slice(0, 22) + '…' : d.name}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground shrink-0">
+                                              {privacyMode ? MASK : `${formatCurrency(d.value, userCurrency, locale)} (${pct}%)`}
+                                            </span>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    </div>
+                  )
+                })()
+              ) : (
+                <p className="text-muted-foreground text-sm text-center py-16">{t('reports.noData')}</p>
+              )
+            }
+          </div>
+        </div>
+
+        {/* Evolution / Category Sparklines */}
+        <div className={`lg:col-span-2 rounded-xl border shadow-sm transition-colors ${selectedDate && meta?.type !== 'income_expenses' ? 'bg-primary/5 border-primary/50' : 'bg-card border-border'}`}>
+          <div className="px-5 pt-5 pb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-foreground">
+                {meta?.type === 'income_expenses'
+                  ? t('reports.categoryTrends')
+                  : meta?.type === 'cash_flow'
+                    ? t('reports.inflowOutflow')
+                    : t('reports.evolution')}
+              </p>
+              {selectedDate && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(null)}
+                  className="flex items-center gap-1 rounded-full bg-primary/10 border border-primary/30 px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/20 whitespace-nowrap"
+                >
+                  {selectedDate}
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            {meta?.type === 'income_expenses' && (() => {
+              const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
+              const allItems = (data?.category_trend ?? []).filter((c) => c.group === groupKey)
+              const totalPages = Math.ceil(allItems.length / 6)
+              const hasPagination = totalPages > 1
+              return (
+                <div className="flex items-center gap-2">
+                  {hasPagination && (
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => setSparklinePage((p) => Math.max(0, p - 1))}
+                        disabled={sparklinePage === 0}
+                        aria-label={t('common.previous')}
+                        className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+                      </button>
+                      <button
+                        onClick={() => setSparklinePage((p) => Math.min(totalPages - 1, p + 1))}
+                        disabled={sparklinePage >= totalPages - 1}
+                        aria-label={t('common.next')}
+                        className="p-1 rounded text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6" /></svg>
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex items-center rounded-lg border border-border bg-muted/30 overflow-hidden">
+                    {(['byExpenses', 'byIncome'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => { setSparklineView(opt); setSparklinePage(0) }}
+                        className={`px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                          sparklineView === opt
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                        }`}
+                      >
+                        {t(`reports.${opt}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+          {meta?.type === 'income_expenses' ? (
+            <div className="pb-4 overflow-hidden">
+              {isLoading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 px-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
+                </div>
+              ) : (() => {
+                const groupKey = sparklineView === 'byIncome' ? 'income' : 'expenses'
+                const allGroupItems: CategoryTrendItem[] = (data?.category_trend ?? []).filter(
+                  (c) => c.group === groupKey
+                )
+                if (allGroupItems.length === 0) {
+                  return (
+                    <p className="text-muted-foreground text-sm text-center py-16">
+                      {t('reports.noData')}
+                    </p>
+                  )
+                }
+                const totalPages = Math.ceil(allGroupItems.length / 6)
+                const pages = Array.from({ length: totalPages }, (_, i) =>
+                  allGroupItems.slice(i * 6, i * 6 + 6)
+                )
+                return (
+                  <div
+                    className="flex"
+                    style={{
+                      // Later pages sit at the inline end: to the left in RTL.
+                      transform: `translateX(${isRtl ? '' : '-'}${sparklinePage * 100}%)`,
+                      transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+                    }}
+                  >
+                    {pages.map((pageItems, pageIdx) => (
+                      <div
+                        key={pageIdx}
+                        className="grid grid-cols-2 sm:grid-cols-3 gap-3 w-full shrink-0 px-4"
+                      >
+                        {pageItems.map((item) => {
+                          const sparkData = item.series.map((s) => ({ date: s.date, v: s.value }))
+                          const gradId = `grad-${item.key}-${item.group}-p${pageIdx}`
+                          return (
+                            <div
+                              key={`${item.key}-${item.group}`}
+                              className="rounded-lg border border-border/50 bg-muted/20 px-3 py-2"
+                            >
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <div
+                                  className="w-2 h-2 rounded-full shrink-0"
+                                  style={{ backgroundColor: item.color }}
+                                />
+                                <span className="text-[11px] text-muted-foreground truncate">
+                                  {item.key === 'uncategorized' ? t('reports.uncategorized') : item.key === 'other' ? t('reports.other') : item.label}
+                                </span>
+                              </div>
+                              <p className="text-xs font-bold tabular-nums text-foreground mb-1">
+                                {mask(formatCompactCurrency(item.total, userCurrency, locale))}
+                              </p>
+                              <div style={{ height: 48 }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <AreaChart data={sparkData} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+                                    <defs>
+                                      <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor={item.color} stopOpacity={0.3} />
+                                        <stop offset="95%" stopColor={item.color} stopOpacity={0.02} />
+                                      </linearGradient>
+                                    </defs>
+                                    <XAxis dataKey="date" hide />
+                                    <Tooltip
+                                      formatter={(value?: number) => [
+                                        privacyMode ? MASK : formatCurrency(value ?? 0, userCurrency, locale),
+                                        item.label,
+                                      ]}
+                                      labelFormatter={(label) => label}
+                                      contentStyle={{ ...tooltipStyle, padding: '4px 8px' }}
+                                    />
+                                    <Area
+                                      type="monotone"
+                                      dataKey="v"
+                                      stroke={item.color}
+                                      strokeWidth={1.5}
+                                      fill={`url(#${gradId})`}
+                                      dot={false}
+                                      activeDot={{ r: 2, fill: item.color }}
+                                    />
+                                  </AreaChart>
+                                </ResponsiveContainer>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+          ) : (
+          <div className="px-1 pb-4" style={{ height: 280 }}>
+            {isLoading ? (
+              <div className="px-4">
+                <Skeleton className="h-full w-full" />
+              </div>
+            ) : chartData.length > 0 && meta ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={barChartData}
+                  margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                  stackOffset={meta.type === 'cash_flow' ? 'none' : 'sign'}
+                  onClick={(payload) => {
+                    const date = payload?.activeLabel as string | undefined
+                    if (!date) return
+                    setSelectedDate((prev) => (prev === date ? null : date))
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                  />
+                  <YAxis
+                    tickFormatter={(v) => {
+                      if (privacyMode) return ''
+                      if (v === 0) return '0'
+                      return formatCompactCurrency(v, userCurrency, locale)
+                    }}
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={64}
+                    tickCount={5}
+                  />
+                  <ReferenceLine y={0} stroke="var(--border)" strokeWidth={1} />
+                  <Tooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload) return null
+                      const items = payload.filter((p) => {
+                        if (p.value === null || p.value === undefined) return false
+                        return Array.isArray(p.value)
+                          ? p.value[0] !== p.value[1]
+                          : (p.value as number) !== 0
+                      })
+                      // A period with nothing to draw, e.g. a month with no
+                      // cash flow at all, gets no tooltip.
+                      if (items.length === 0) return null
+                      const hovered = items[0].payload as BarChartDatum
+                      const cashFlowPoint = meta.type === 'cash_flow'
+                        ? cashFlowBar(hovered.inflowAmount, hovered.outflowAmount)
+                        : null
+                      const netFlowColor = !cashFlowPoint || cashFlowPoint.netFlow === 0
+                        ? 'var(--muted-foreground)'
+                        : cashFlowPoint.netFlow > 0 ? 'var(--chart-income)' : 'var(--chart-expense)'
+                      // Cash-flow bars carry ranges, and a zero-height segment
+                      // drops out of `items`; list both amounts from the period
+                      // itself so the net flow always has both of its terms.
+                      const rows = cashFlowPoint
+                        ? [
+                            { key: 'inflow', name: 'inflow', color: 'var(--chart-income)', value: cashFlowPoint.inflowAmount },
+                            { key: 'outflow', name: 'outflow', color: 'var(--chart-expense)', value: -cashFlowPoint.outflowAmount },
+                          ]
+                        : items.map((p) => ({
+                            key: p.dataKey as string,
+                            name: p.name,
+                            color: p.color,
+                            value: p.value as number,
+                          }))
+                      return (
+                        <div style={tooltipStyle} className="px-3 py-2">
+                          <p className="text-xs font-medium mb-1">{label}</p>
+                          {rows.map((row) => (
+                            <p key={row.key} className="text-xs" style={{ color: row.color }}>
+                              {t(`reports.${row.key}`, { defaultValue: row.name })}:{' '}
+                              {privacyMode ? MASK : formatCurrency(row.value, userCurrency, locale)}
+                            </p>
+                          ))}
+                          {cashFlowPoint && (
+                            <p
+                              data-testid="cash-flow-net"
+                              className="text-xs font-medium"
+                              style={{ color: netFlowColor }}
+                            >
+                              {t('reports.netFlow')}:{' '}
+                              {privacyMode ? MASK : formatCurrency(cashFlowPoint.netFlow, userCurrency, locale)}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    }}
+                  />
+                  <Legend
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }}
+                    formatter={(value: string) => t(`reports.${value}`, { defaultValue: value })}
+                  />
+                  {(() => {
+                    const isNetWorth = meta.type === 'net_worth'
+                    const allSeries = meta.type === 'cash_flow'
+                      ? [
+                          { key: 'inflow', color: 'var(--chart-income)' },
+                          { key: 'outflow', color: 'var(--chart-expense)' },
+                        ]
+                      : meta.series_keys.map((k) => ({ key: k, color: colorMap[k] || 'var(--chart-1)' }))
+                    const filteredSeries = allSeries.filter(({ key }) =>
+                      barChartData.some((d) => {
+                        const v = d[key]
+                        return Array.isArray(v)
+                          ? v[0] !== v[1]
+                          : typeof v === 'number' && v !== 0
+                      })
+                    )
+                    const positiveKeys = isNetWorth ? filteredSeries.filter(({ key }) => !NEGATIVE_SERIES.has(key)) : filteredSeries
+                    const negativeKeys = isNetWorth ? filteredSeries.filter(({ key }) => NEGATIVE_SERIES.has(key)) : []
+                    const lastPositiveKey = positiveKeys.at(-1)?.key ?? null
+                    const lastNegativeKey = negativeKeys.at(-1)?.key ?? null
+                    return filteredSeries.map(({ key, color }) => {
+                      const isCashFlowChart = meta.type === 'cash_flow'
+                      let radius: [number, number, number, number] = [0, 0, 0, 0]
+                      if (isNetWorth && NEGATIVE_SERIES.has(key) && key === lastNegativeKey) {
+                        radius = [4, 4, 0, 0]
+                      } else if (!isCashFlowChart && key === lastPositiveKey) {
+                        radius = [4, 4, 0, 0]
+                      }
+                      return (
+                        <Bar
+                          key={key}
+                          dataKey={key}
+                          stackId="stack"
+                          fill={color}
+                          radius={radius}
+                          maxBarSize={32}
+                          shape={isCashFlowChart
+                            ? (props: BarShapeProps) => (
+                                <Rectangle
+                                  {...props}
+                                  radius={cashFlowTopSeries(props.payload) === key ? [4, 4, 0, 0] : 0}
+                                />
+                              )
+                            : undefined}
+                        >
+                          {selectedDate && barChartData.map((d) => (
+                            <Cell
+                              key={d.date}
+                              fill={color}
+                              fillOpacity={d.date === selectedDate ? 1 : 0.4}
+                            />
+                          ))}
+                        </Bar>
+                      )
+                    })
+                  })()}
+                  {meta.type === 'net_worth' && (
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      name={t('reports.netWorth', { defaultValue: 'Net Worth' })}
+                      stroke="var(--chart-income)"
+                      strokeWidth={2}
+                      strokeDasharray="6 3"
+                      dot={false}
+                      activeDot={{ r: 4, fill: 'var(--chart-income)' }}
+                      isAnimationActive={false}
+                    />
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted-foreground text-sm text-center py-16">
+                {t('reports.noData')}
+              </p>
+            )}
+          </div>
+          )}
+        </div>
+      </div>
+      </>
+      )}
+      </>
+      )}
+    </div>
+  )
+}

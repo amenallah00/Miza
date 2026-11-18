@@ -1,0 +1,784 @@
+import React, { useMemo, useState } from 'react'
+import { getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
+import { useTranslation } from 'react-i18next'
+import { useDisplayLocale, useDateLocale } from '@/hooks/use-display-locale'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { categories as categoriesApi, categoryGroups as categoryGroupsApi, recurring as recurringApi, accounts as accountsApi, currencies as currenciesApi } from '@/lib/api'
+import { extractApiError } from '@/lib/api-errors'
+import { localDateString } from '@/lib/date-utils'
+import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import type { Category, CategoryGroup, CategoryLineShareType, RecurringPriceChange, RecurringTransaction } from '@/types'
+import { CategorySplitBadge } from '@/components/category-lines-display'
+import { TransactionCategoryLinesSection } from '@/components/transaction-category-lines-section'
+import {
+  buildLinesPayload,
+  checkLines,
+  emptyRow,
+  isSplitByCategory,
+  largestLineCategoryId,
+  rowBasisPoints,
+  rowCents,
+  rowsFromLines,
+  type CategoryLineRow,
+} from '@/lib/category-lines'
+import { formatAmountInput, ltrAmount, parseAmountInput } from '@/lib/format'
+import { Pencil, Trash2, Plus, RefreshCw, Info, History, TrendingUp, TrendingDown } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { PageHeader } from '@/components/page-header'
+import { CategorySelect } from '@/components/category-select'
+import { DatePickerInput } from '@/components/ui/date-picker-input'
+import { usePrivacyMode } from '@/hooks/use-privacy-mode'
+import { useAuth } from '@/contexts/auth-context'
+import { useWorkspace } from '@/contexts/workspace-context'
+import { formatCurrency } from '@/lib/format'
+
+const TH = 'text-xs font-medium text-muted-foreground py-3'
+
+/** Compact list cap within the API's 1-50 bound. */
+const RECENT_CHANGES_LIMIT = 20
+
+/** The backend sends percentage units (15.04 means 15.04%, not 1504%). */
+function formatSignedPercent(value: string, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    style: 'percent',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    signDisplay: 'exceptZero',
+  }).format(Number(value) / 100)
+}
+
+/** One read-only price-change row, shared by the recent list and the dialog. */
+function PriceChangeRow({
+  event,
+  description,
+  seriesType,
+}: {
+  event: RecurringPriceChange
+  description?: string
+  seriesType?: RecurringTransaction['type']
+}) {
+  const { t } = useTranslation()
+  const locale = useDisplayLocale()
+  const { mask } = usePrivacyMode()
+  const increase = event.direction === 'increase'
+  const effectColor = seriesType === 'credit'
+    ? (increase ? 'text-emerald-600' : 'text-rose-500')
+    : seriesType === 'debit'
+      ? (increase ? 'text-rose-500' : 'text-emerald-600')
+      : 'text-muted-foreground'
+  const oldAmount = mask(formatCurrency(Number(event.previous_amount), event.currency, locale))
+  const newAmount = mask(formatCurrency(Number(event.current_amount), event.currency, locale))
+  const absolute = mask(formatCurrency(Number(event.absolute_delta), event.currency, locale))
+  return (
+    <li
+      className="px-4 sm:px-5 py-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm border-b border-border last:border-0"
+      data-testid="price-change-row"
+    >
+      {description && <span className="font-medium text-foreground">{description}</span>}
+      <span className="tabular-nums text-foreground">
+        {t('recurring.priceChangeAmount', { old: oldAmount, new: newAmount })}
+      </span>
+      <span className="tabular-nums text-muted-foreground">
+        {t('recurring.priceChangeDelta', { absolute, percent: mask(formatSignedPercent(event.percent_delta, locale)) })}
+      </span>
+      {/* Icon plus always-visible text: readable in grayscale and by screen readers. */}
+      <span
+        className={cn(
+          'inline-flex items-center gap-1 text-xs font-semibold',
+          effectColor
+        )}
+      >
+        {increase ? <TrendingUp size={13} aria-hidden /> : <TrendingDown size={13} aria-hidden />}
+        {increase ? t('recurring.priceChangeIncrease') : t('recurring.priceChangeDecrease')}
+      </span>
+      {event.gap_days > 0 && (
+        <span className="text-xs text-muted-foreground">
+          {t('recurring.priceChangeGap', { days: event.gap_days })}
+        </span>
+      )}
+    </li>
+  )
+}
+
+function SectionCard({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+      {children}
+    </div>
+  )
+}
+
+function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
+  return (
+    <div className="px-4 sm:px-5 py-4 border-b border-border flex flex-wrap items-center justify-between gap-2">
+      <p className="text-sm font-semibold text-foreground">{title}</p>
+      {action}
+    </div>
+  )
+}
+
+export default function RecurringPage() {
+  const { t } = useTranslation()
+
+  return (
+    <div>
+      <PageHeader section={t('recurring.title')} title={t('recurring.title')} />
+      <RecurringTab />
+    </div>
+  )
+}
+
+function RecurringTab() {
+  const { t } = useTranslation()
+  const locale = useDisplayLocale()
+  const dateLocale = useDateLocale()
+  const { mask } = usePrivacyMode()
+  const { user } = useAuth()
+  const { canWrite } = useWorkspace()
+  const userCurrency = user?.preferences?.currency_display ?? 'USD'
+  const queryClient = useQueryClient()
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<RecurringTransaction | null>(null)
+  const [deletingRecurring, setDeletingRecurring] = useState<RecurringTransaction | null>(null)
+  const [historySeries, setHistorySeries] = useState<RecurringTransaction | null>(null)
+
+  const { data: recurringList, isError: recurringListFailed } = useQuery({
+    queryKey: ['recurring'],
+    queryFn: recurringApi.list,
+  })
+
+  const { data: recentChanges, isPending: recentChangesPending, isError: recentChangesFailed } =
+    useQuery({
+      queryKey: ['recurring', 'recent-price-changes', RECENT_CHANGES_LIMIT],
+      queryFn: () => recurringApi.recentPriceChanges(RECENT_CHANGES_LIMIT),
+      // Read-only projection: short stale time plus the default refetch on
+      // focus; no polling.
+      staleTime: 30_000,
+    })
+
+  const { data: priceHistory, isPending: priceHistoryPending, isError: priceHistoryFailed } =
+    useQuery({
+      queryKey: ['recurring', 'price-history', historySeries?.id],
+      queryFn: () => recurringApi.priceHistory(historySeries?.id ?? ''),
+      // The detail query only runs while its dialog is open.
+      enabled: Boolean(historySeries),
+    })
+
+  const { data: categoriesList } = useQuery({
+    queryKey: ['categories'],
+    queryFn: categoriesApi.list,
+  })
+
+  const { data: allCategoriesList } = useQuery({
+    queryKey: ['categories', 'management'],
+    queryFn: categoriesApi.listIncludingHidden,
+    enabled: Boolean(editing?.category_id),
+  })
+
+  const { data: categoryGroupsList } = useQuery({
+    queryKey: ['categoryGroups'],
+    queryFn: categoryGroupsApi.list,
+  })
+
+  const { data: accountsList } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => accountsApi.list(),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data: Partial<RecurringTransaction>) => recurringApi.create(data),
+    onSuccess: () => {
+      invalidateFinancialQueries(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['recurring'] })
+      setDialogOpen(false)
+      toast.success(t('recurring.created'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, ...data }: Partial<RecurringTransaction> & { id: string }) =>
+      recurringApi.update(id, data),
+    onSuccess: () => {
+      invalidateFinancialQueries(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['recurring'] })
+      setDialogOpen(false)
+      setEditing(null)
+      toast.success(t('recurring.updated'))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => recurringApi.delete(id),
+    onSuccess: () => {
+      invalidateFinancialQueries(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['recurring'] })
+      setDeletingRecurring(null)
+      toast.success(t('recurring.deleted'))
+    },
+    onError: (err: unknown) => {
+      toast.error(extractApiError(err, t('common.error')))
+    },
+  })
+
+  const generateMutation = useMutation({
+    mutationFn: () => recurringApi.generate(),
+    onSuccess: (data) => {
+      invalidateFinancialQueries(queryClient)
+      queryClient.invalidateQueries({ queryKey: ['recurring'] })
+      toast.success(t('recurring.generated', { count: data.generated }))
+    },
+    onError: () => toast.error(t('common.error')),
+  })
+
+  const frequencyLabel = (f: string) => {
+    const map: Record<string, string> = {
+      monthly: t('recurring.monthly'),
+      quarterly: t('recurring.quarterly'),
+      semiannual: t('recurring.semiannual'),
+      weekly: t('recurring.weekly'),
+      biweekly: t('recurring.biweekly'),
+      yearly: t('recurring.yearly'),
+    }
+    return map[f] ?? f
+  }
+
+  return (
+    <>
+      <SectionCard>
+        <SectionHeader
+          title={t('recurring.title')}
+          action={
+            canWrite ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 h-8"
+                  onClick={() => generateMutation.mutate()}
+                  disabled={generateMutation.isPending}
+                >
+                  <RefreshCw size={12} />
+                  <span className="hidden sm:inline">{t('recurring.generatePending')}</span>
+                </Button>
+                <Button size="sm" className="gap-1.5 h-8" onClick={() => { setEditing(null); setDialogOpen(true) }}>
+                  <Plus size={13} /> <span className="hidden sm:inline">{t('recurring.add')}</span>
+                </Button>
+              </div>
+            ) : undefined
+          }
+        />
+        {recurringList && recurringList.length > 0 ? (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border">
+                <th className={`${TH} ps-4 sm:ps-5 text-start`}>{t('recurring.description')}</th>
+                <th className={`${TH} text-start w-36`}>{t('recurring.amount')}</th>
+                <th className={`${TH} text-start w-28 hidden md:table-cell`}>{t('recurring.frequency')}</th>
+                <th className={`${TH} text-start w-32 hidden md:table-cell`}>{t('recurring.nextOccurrence')}</th>
+                <th className={`${TH} text-start w-24 hidden sm:table-cell`}>{t('recurring.status')}</th>
+                <th className={`${TH} text-end w-12`}>
+                  <span className="sr-only">{t('recurring.viewPriceHistory')}</span>
+                </th>
+                {canWrite && <th className={`${TH} pe-4 sm:pe-5 text-end w-24`}>{t('recurring.actions')}</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {recurringList.map((rt) => (
+                <tr key={rt.id} className="border-b border-border last:border-0 hover:bg-muted transition-colors">
+                  <td className="py-3 ps-4 sm:ps-5 text-sm font-medium text-foreground">
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      {rt.description}
+                      {isSplitByCategory(rt) && <CategorySplitBadge tx={rt} />}
+                    </span>
+                  </td>
+                  <td className={`py-3 text-xs sm:text-sm font-bold tabular-nums ${rt.type === 'credit' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    {mask(ltrAmount(`${rt.type === 'credit' ? '+' : '−'}${formatCurrency(rt.amount, rt.currency, locale)}`))}
+                    {rt.currency !== userCurrency && rt.amount_primary != null && (
+                      <div className="flex items-center gap-1 text-[11px] font-normal text-muted-foreground">
+                        <span>{mask(formatCurrency(rt.amount_primary, userCurrency, locale))}</span>
+                        <span title={t('recurring.fxEstimate', { rate: rt.fx_rate_used?.toFixed(4) ?? '–' })}>
+                          <Info size={11} className="inline opacity-60" />
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-3 hidden md:table-cell">
+                    <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full font-medium">
+                      {frequencyLabel(rt.frequency)}
+                    </span>
+                  </td>
+                  <td className="py-3 text-xs text-muted-foreground tabular-nums hidden md:table-cell">
+                    {new Date(rt.next_occurrence + 'T00:00:00').toLocaleDateString(dateLocale)}
+                  </td>
+                  <td className="py-3 hidden sm:table-cell">
+                    <span className={cn(
+                      'text-[11px] font-semibold px-2 py-0.5 rounded-full border',
+                      rt.is_active
+                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                        : 'bg-muted text-muted-foreground border-border'
+                    )}>
+                      {rt.is_active ? t('recurring.active') : t('recurring.inactive')}
+                    </span>
+                  </td>
+                  {/* Price history is reachable for every row, including
+                      read-only workspaces. */}
+                  <td className="py-3 pe-2 text-end">
+                    <button
+                      type="button"
+                      className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
+                      onClick={() => setHistorySeries(rt)}
+                      aria-label={t('recurring.viewPriceHistory')}
+                      title={t('recurring.viewPriceHistory')}
+                    >
+                      <History size={13} />
+                    </button>
+                  </td>
+                  {canWrite && (
+                    <td className="py-3 pe-4 sm:pe-5">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors"
+                          onClick={() => { setEditing(rt); setDialogOpen(true) }}
+                          aria-label={t('common.edit')}
+                          title={t('common.edit')}
+                        >
+                          <Pencil size={13} />
+                        </button>
+                        <button
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                          onClick={() => setDeletingRecurring(rt)}
+                          disabled={deleteMutation.isPending}
+                          aria-label={t('common.delete')}
+                          title={t('common.delete')}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p className="text-sm text-muted-foreground text-center py-10">{t('recurring.empty')}</p>
+        )}
+      </SectionCard>
+
+      {/* A successful empty projection has no card; errors and loading stay visible. */}
+      {(recentChangesPending || recentChangesFailed || (recurringListFailed && !recurringList) || Boolean(recentChanges?.length)) && (
+      <SectionCard>
+        <div className="px-4 sm:px-5 py-4 border-b border-border">
+          <h2 className="text-sm font-semibold text-foreground">{t('recurring.priceChangesTitle')}</h2>
+        </div>
+        {recentChangesFailed || (recurringListFailed && !recurringList) ? (
+          <p className="text-sm text-muted-foreground text-center py-6">{t('common.error')}</p>
+        ) : recentChangesPending ? (
+          <p className="text-sm text-muted-foreground text-center py-6">{t('common.loading')}</p>
+        ) : recentChanges && recentChanges.length > 0 ? (
+          <ul>
+            {recentChanges.map((event) => (
+              <PriceChangeRow
+                key={event.current_transaction_id}
+                event={event}
+                description={recurringList?.find((rt) => rt.id === event.recurring_id)?.description}
+                seriesType={recurringList?.find((rt) => rt.id === event.recurring_id)?.type}
+              />
+            ))}
+          </ul>
+        ) : null}
+      </SectionCard>
+      )}
+
+      {/* Read-only price history for one series. No "update
+          amount" action: the signal is evidence, not a schedule edit. */}
+      <Dialog
+        open={Boolean(historySeries)}
+        onOpenChange={(open) => {
+          if (!open) setHistorySeries(null)
+        }}
+      >
+        <DialogContent className="max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{t('recurring.priceHistory')}</DialogTitle>
+          </DialogHeader>
+          {historySeries && (
+            <div className="min-h-0 overflow-y-auto space-y-4">
+              <div className="text-sm space-y-1">
+                <p className="font-medium text-foreground">{historySeries.description}</p>
+                <p className="text-muted-foreground tabular-nums">
+                  {mask(
+                    `${historySeries.type === 'credit' ? '+' : '−'}${formatCurrency(historySeries.amount, historySeries.currency, locale)}`
+                  )}
+                  {' · '}
+                  {frequencyLabel(historySeries.frequency)}
+                </p>
+              </div>
+              {priceHistoryFailed ? (
+                <p className="text-sm text-muted-foreground">{t('common.error')}</p>
+              ) : priceHistoryPending ? (
+                <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+              ) : priceHistory ? (
+                <div className="space-y-3">
+                  {priceHistory.changes.length > 0 && (
+                    <span className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full border bg-muted text-muted-foreground border-border">
+                      {t('recurring.priceChangeBadge')}
+                    </span>
+                  )}
+                  {priceHistory.eligibility === 'insufficient_history' ? (
+                    <p className="text-sm text-muted-foreground">{t('recurring.priceChangeInsufficient')}</p>
+                  ) : priceHistory.changes.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">{t('recurring.priceChangesEmpty')}</p>
+                  ) : (
+                    <ul className="border border-border rounded-lg overflow-hidden">
+                      {priceHistory.changes.map((event) => (
+                        <PriceChangeRow key={event.current_transaction_id} event={event} seriesType={historySeries.type} />
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={dialogOpen} onOpenChange={() => { setDialogOpen(false); setEditing(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editing ? t('recurring.edit') : t('recurring.add')}</DialogTitle>
+          </DialogHeader>
+          <RecurringForm
+            key={editing?.id ?? 'new'}
+            recurring={editing}
+            categories={categoriesList ?? []}
+            categoryGroups={categoryGroupsList ?? []}
+            currentCategory={allCategoriesList?.find(
+              (category) => category.id === editing?.category_id
+            )}
+            accounts={accountsList ?? []}
+            onSave={(data) => {
+              if (editing) {
+                updateMutation.mutate({ id: editing.id, ...data })
+              } else {
+                createMutation.mutate(data)
+              }
+            }}
+            onCancel={() => { setDialogOpen(false); setEditing(null) }}
+            loading={createMutation.isPending || updateMutation.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <DeleteConfirmationDialog
+        open={!!deletingRecurring}
+        title={t('recurring.confirmDeleteTitle')}
+        description={t('recurring.confirmDeleteDescription', { description: deletingRecurring?.description })}
+        isPending={deleteMutation.isPending}
+        onClose={() => setDeletingRecurring(null)}
+        onConfirm={() => deletingRecurring && deleteMutation.mutate(deletingRecurring.id)}
+      />
+    </>
+  )
+}
+
+export function RecurringForm({
+  recurring,
+  categories,
+  categoryGroups,
+  currentCategory,
+  accounts,
+  onSave,
+  onCancel,
+  loading,
+}: {
+  recurring: RecurringTransaction | null
+  categories: Category[]
+  categoryGroups: CategoryGroup[]
+  currentCategory?: Category
+  accounts: { id: string; name: string; display_name?: string | null }[]
+  onSave: (data: Partial<RecurringTransaction>) => void
+  onCancel: () => void
+  loading: boolean
+}) {
+  const { t } = useTranslation()
+  const { user } = useAuth()
+  const userCurrency = user?.preferences?.currency_display ?? 'USD'
+  const sortedAccounts = useMemo(() => sortAccountsByDisplayName(accounts), [accounts])
+  const { data: supportedCurrencies } = useQuery({
+    queryKey: ['currencies'],
+    queryFn: currenciesApi.list,
+    staleTime: Infinity,
+  })
+  // Amounts are typed under the workspace number format (issue #1072): on
+  // "1 000,00" a comma is the decimal separator, which a native number input
+  // silently drops. The field is text and goes through parseAmountInput, the
+  // same path the transaction dialog uses.
+  const displayLocale = useDisplayLocale()
+  const [description, setDescription] = useState(recurring?.description ?? '')
+  const [amount, setAmount] = useState(
+    recurring?.amount != null ? formatAmountInput(Number(recurring.amount), displayLocale) : '',
+  )
+  const parsedAmount = parseAmountInput(amount, displayLocale)
+  const amountInvalid = amount !== '' && parsedAmount == null
+  const [currency, setCurrency] = useState(recurring?.currency ?? userCurrency)
+  const [type, setType] = useState<'debit' | 'credit'>(recurring?.type ?? 'debit')
+  const [frequency, setFrequency] = useState(recurring?.frequency ?? 'monthly')
+  const [weekendAdjustment, setWeekendAdjustment] = useState<RecurringTransaction['weekend_adjustment']>(
+    recurring?.weekend_adjustment ?? 'none'
+  )
+  const [dayOfMonth, setDayOfMonth] = useState(recurring?.day_of_month?.toString() ?? '')
+  const [startDate, setStartDate] = useState(recurring?.start_date ?? localDateString())
+  const [endDate, setEndDate] = useState(recurring?.end_date ?? '')
+  const [categoryId, setCategoryId] = useState(recurring?.category_id ?? '')
+  const [accountId, setAccountId] = useState(recurring?.account_id ?? '')
+  const [isActive, setIsActive] = useState(recurring?.is_active ?? true)
+  const [autoGenerate, setAutoGenerate] = useState(recurring?.auto_generate ?? true)
+  // Split across categories, as in the transaction dialog: every occurrence
+  // the schedule generates starts with these parts.
+  const [lineRows, setLineRows] = useState<CategoryLineRow[] | null>(() =>
+    recurring && isSplitByCategory(recurring) && recurring.category_lines
+      ? rowsFromLines(recurring.category_lines, (v) => formatAmountInput(v, displayLocale))
+      : null,
+  )
+  const [lineShareType, setLineShareType] = useState<CategoryLineShareType>(
+    () => recurring?.category_lines?.[0]?.share_type ?? 'exact',
+  )
+  const hadInitialLines = !!recurring && isSplitByCategory(recurring)
+  const linesValid = !lineRows || checkLines(lineRows, lineShareType, parsedAmount ?? 0, displayLocale).valid
+  const undoSplit = () => {
+    const kept = largestLineCategoryId(
+      (lineRows ?? []).map((row, position) => ({
+        id: row.key, category_id: row.categoryId, position, share_type: lineShareType,
+        share_pct: null, notes: null,
+        amount: lineShareType === 'exact'
+          ? rowCents(row.amount, displayLocale) ?? 0
+          : rowBasisPoints(row.percent) ?? 0,
+      })),
+    )
+    setCategoryId(kept ?? '')
+    setLineRows(null)
+  }
+
+  const selectClass = 'w-full border border-border rounded-lg px-3 py-2 text-sm bg-card text-foreground focus:outline-none focus:ring-2 focus:ring-primary'
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (parsedAmount == null) return
+        onSave({
+          description,
+          amount: parsedAmount,
+          currency,
+          type,
+          frequency,
+          weekend_adjustment: weekendAdjustment,
+          day_of_month: dayOfMonth ? parseInt(dayOfMonth) : null,
+          start_date: startDate,
+          end_date: endDate || null,
+          category_id: lineRows ? null : categoryId || null,
+          account_id: accountId || null,
+          is_active: isActive,
+          auto_generate: autoGenerate,
+          ...(lineRows
+            ? { category_lines: buildLinesPayload(lineRows, lineShareType, displayLocale) }
+            : hadInitialLines
+              ? { category_lines: { share_type: 'exact', lines: [] } }
+              : {}),
+        } as Partial<RecurringTransaction>)
+      }}
+      className="space-y-4"
+    >
+      <div className="space-y-2">
+        <Label htmlFor="recurring-description">{t('recurring.description')}</Label>
+        <Input id="recurring-description" value={description} onChange={(e) => setDescription(e.target.value)} required />
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="recurring-amount">{t('recurring.amount')}</Label>
+          <Input
+            id="recurring-amount"
+            type="text"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            aria-invalid={amountInvalid}
+            aria-describedby={amountInvalid ? 'recurring-amount-error' : undefined}
+            required
+          />
+          {amountInvalid && (
+            <p id="recurring-amount-error" role="alert" className="text-xs text-destructive">
+              {t('common.invalidAmount', { example: formatAmountInput(1234.56, displayLocale) })}
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>{t('recurring.currency')}</Label>
+          <select className={selectClass} value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {(supportedCurrencies ?? [{ code: userCurrency, symbol: userCurrency, name: userCurrency, flag: '' }]).map((c) => (
+              <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label>{t('recurring.type')}</Label>
+          <select className={selectClass} value={type} onChange={(e) => setType(e.target.value as 'debit' | 'credit')}>
+            <option value="debit">{t('recurring.expense')}</option>
+            <option value="credit">{t('recurring.income')}</option>
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>{t('recurring.frequency')}</Label>
+          <select className={selectClass} value={frequency} onChange={(e) => setFrequency(e.target.value as RecurringTransaction['frequency'])}>
+            <option value="monthly">{t('recurring.monthly')}</option>
+            <option value="quarterly">{t('recurring.quarterly')}</option>
+            <option value="semiannual">{t('recurring.semiannual')}</option>
+            <option value="weekly">{t('recurring.weekly')}</option>
+            <option value="biweekly">{t('recurring.biweekly')}</option>
+            <option value="yearly">{t('recurring.yearly')}</option>
+          </select>
+        </div>
+        {(frequency === 'monthly' || frequency === 'quarterly' || frequency === 'semiannual') && (
+          <div className="space-y-2">
+            <Label>{t('recurring.dayOfMonth')}</Label>
+            <Input type="number" min="1" max="31" value={dayOfMonth} onChange={(e) => setDayOfMonth(e.target.value)} />
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label>{t('recurring.weekendAdjustment')}</Label>
+        <select
+          className={selectClass}
+          value={weekendAdjustment}
+          onChange={(e) => setWeekendAdjustment(e.target.value as RecurringTransaction['weekend_adjustment'])}
+        >
+          <option value="none">{t('recurring.weekendAdjustmentNone')}</option>
+          <option value="previous_friday">{t('recurring.weekendAdjustmentPreviousFriday')}</option>
+          <option value="next_monday">{t('recurring.weekendAdjustmentNextMonday')}</option>
+        </select>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>{t('recurring.startDate')}</Label>
+          <DatePickerInput value={startDate} onChange={setStartDate} className="w-full justify-start" />
+        </div>
+        <div className="space-y-2">
+          <Label>{t('recurring.endDate')}</Label>
+          <DatePickerInput value={endDate} onChange={setEndDate} placeholder={t('recurring.endDate')} className="w-full justify-start" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between min-h-5">
+            <Label>{t('recurring.category')}</Label>
+            {!lineRows && (
+              <button
+                type="button"
+                onClick={() => {
+                  const first = emptyRow()
+                  first.categoryId = categoryId
+                  setLineShareType('exact')
+                  setLineRows([first, emptyRow()])
+                  setCategoryId('')
+                }}
+                className="text-xs text-primary hover:underline font-medium cursor-pointer"
+              >
+                {t('categoryLines.start')}
+              </button>
+            )}
+          </div>
+          {lineRows ? (
+            <div className="h-9 flex items-center px-3 rounded-lg border border-dashed border-violet-300 dark:border-violet-800 text-sm text-violet-700 dark:text-violet-300">
+              {t('categoryLines.badge', { count: lineRows.length })}
+            </div>
+          ) : (
+            <CategorySelect
+              value={categoryId}
+              onChange={setCategoryId}
+              categories={categories}
+              groups={categoryGroups}
+              currentCategory={currentCategory}
+              allowNone={true}
+              className={selectClass}
+            />
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>{t('recurring.account')}</Label>
+          <select
+            className={selectClass}
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+            required
+          >
+            {!accountId && <option value="" disabled hidden>{t('transactions.createCounterpartSelectAccount')}</option>}
+            {sortedAccounts.map((acc) => (
+              <option key={acc.id} value={acc.id}>{getAccountName(acc)}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      {lineRows && (
+        <TransactionCategoryLinesSection
+          amount={parsedAmount ?? 0}
+          currency={currency}
+          rows={lineRows}
+          shareType={lineShareType}
+          onChange={(rows, shareType) => {
+            setLineRows(rows)
+            setLineShareType(shareType)
+          }}
+          onUndo={undoSplit}
+          categories={categories}
+          groups={categoryGroups}
+        />
+      )}
+      <label className="flex items-start gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={autoGenerate}
+          onChange={(e) => setAutoGenerate(e.target.checked)}
+          className="h-4 w-4 mt-0.5 rounded border-border"
+        />
+        <span className="text-sm text-foreground">
+          {t('recurring.autoGenerate')}
+          <span className="block text-xs text-muted-foreground">{t('recurring.autoGenerateHelp')}</span>
+        </span>
+      </label>
+      {recurring && (
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isActive}
+            onChange={(e) => setIsActive(e.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          <span className="text-sm text-foreground">{t('recurring.active')}</span>
+        </label>
+      )}
+      <DialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>{t('common.cancel')}</Button>
+        <Button type="submit" disabled={loading || !linesValid}>
+          {loading ? t('common.loading') : t('common.save')}
+        </Button>
+      </DialogFooter>
+    </form>
+  )
+}

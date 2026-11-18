@@ -1,0 +1,96 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class AgentSettings(BaseSettings):
+    # Master switch. When false, the router is not mounted, MCP servers are
+    # not contacted, and no background tasks run.
+    enabled: bool = False
+
+    # Built-in MCP server URL. The mcp-server container speaks JSON-RPC 2.0.
+    # This is the internal address the backend uses to reach the container.
+    builtin_mcp_url: str = "http://mcp-server:8765/mcp"
+
+    # Public URL external agents use to reach the built-in MCP server, shown
+    # in the UI token panel. Leave blank to have the frontend derive it from
+    # the browser location (``<protocol>//<hostname>:8765/mcp``). Set this
+    # when the MCP server is exposed behind an ingress/reverse proxy on a
+    # custom host, subpath, or standard 80/443 port instead of ``:8765``.
+    # Example: "https://securo.example.com/mcp".
+    external_mcp_url: str = ""
+
+    # Comma-separated extra MCP servers users can plug in (URL[|name]).
+    # Example: "http://my-tools:9000/mcp|my-tools,http://other:9001/mcp"
+    # Each one gets tokens with its own audience, `securo-mcp-extra:<name>`,
+    # never `securo-mcp`: a token the built-in server accepts never leaves
+    # it. A server that checks the audience should expect that value. The
+    # name "securo" is reserved for the built-in server.
+    extra_mcp_servers: str = ""
+
+    # Shared secret used to mint short-lived JWTs for MCP calls. Distinct
+    # from the main app secret so revocation is independent.
+    #
+    # Empty means "derive from SECRET_KEY" (see app/agents/mcp/keys.py).
+    # There is deliberately no default value: a public one would let any
+    # caller forge a token for any user. Known public defaults are refused
+    # at startup, and so is deriving from a public or short SECRET_KEY.
+    mcp_jwt_secret: str = ""
+    mcp_jwt_ttl_seconds: int = 600
+
+    # TTL for long-lived tokens minted via the UI for external agents
+    # (Claude Desktop, n8n, custom clients). The feature itself follows
+    # `enabled` — if agents are on, the mint endpoint is mounted and the
+    # mcp-server container publishes port 8765.
+    mcp_external_ttl_days: int = 90
+
+    # Browser origins allowed to call the MCP server, comma-separated. The
+    # MCP spec requires servers to validate `Origin` (a DNS-rebinding guard)
+    # and refuse an invalid one with 403. Legitimate callers — the agent
+    # runtime, MCP gateways, desktop clients — send no `Origin` at all, so
+    # the default admits no browser page. Set only for a browser-based MCP
+    # client you deliberately want to allow, e.g. "https://app.example.com".
+    mcp_allowed_origins: str = ""
+
+    # Embedding dimension for the knowledge_chunks vector column. Locked at
+    # migration time. 1536 covers OpenAI text-embedding-3-small (default) and
+    # nomic-embed-text via Matryoshka padding/truncation.
+    embedding_dim: int = 1536
+
+    # Default RAG parameters (overridable per agent in the DB row).
+    default_top_n: int = 6
+    default_similarity_threshold: float = 0.25
+
+    # Embedding provider/model. Both MCP-server and Celery worker honor
+    # these. Switching requires re-embedding existing docs (their
+    # embeddings are tied to the model that produced them).
+    #
+    # Default `native` uses fastembed with a small multilingual model
+    # bundled in-process — works zero-config (no Ollama/OpenAI/etc).
+    # Users can switch to ollama/openai/openai_compatible for higher
+    # quality or faster inference.
+    embedding_provider: str = "native"
+    embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    embedding_native_cache_dir: str = "/app/data/embedding_models"
+    embedding_ollama_base_url: str = "http://ollama:11434"
+    embedding_openai_base_url: str = "https://api.openai.com/v1"
+    embedding_openai_api_key: str = ""
+
+    # Where uploaded knowledge files live on disk (per-instance).
+    knowledge_storage_path: str = "/app/data/agent_knowledge"
+    knowledge_max_file_size_mb: int = 25
+
+    # Same env_file pair as the main Settings: the CWD-relative ".env" for
+    # backward compatibility plus the anchored backend/.env, so the API and the
+    # Celery worker/beat read the same file whatever directory they start from.
+    model_config = SettingsConfigDict(
+        env_file=(".env", Path(__file__).resolve().parents[2] / ".env"),
+        env_prefix="AGENTS_",
+        extra="ignore",
+    )
+
+
+@lru_cache
+def get_agent_settings() -> AgentSettings:
+    return AgentSettings()

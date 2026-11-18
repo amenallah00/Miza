@@ -1,0 +1,286 @@
+# Default values for securo.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+global:
+  # The public domain of the application (e.g., securo.local, app.securo.com)
+  domain: "securo.local"
+  # Set to true if the application is accessed over HTTPS (changes generated URLs)
+  tls: false
+
+  # For production, we recommend passing existingSecret instead of creating one via Helm values
+  # existingSecret: "securo-secrets"
+
+# If existingSecret is NOT set, this secret will be created with the values below
+secret:
+  # S3 credentials; omit both to use the SDK credential chain (e.g. IAM roles).
+  storageS3AccessKey: ""
+  storageS3SecretKey: ""
+  storageS3SessionToken: ""
+  # Optional. Left empty, Securo generates a unique key on first start and keeps
+  # it in the database. Set one (openssl rand -hex 32) to manage it yourself.
+  secretKey: ""
+  # If postgresql.enabled is true, the internal database will be deployed.
+  # If postgresql.enabled is false, you must provide your external database URL here or in existingSecret.
+  databaseUrl: 'postgresql+asyncpg://postgres:postgres@{{ include "securo.fullname" . }}-postgresql:5432/securo'
+
+  # Pluggy
+  pluggyClientId: ""
+  pluggyClientSecret: ""
+
+  # Enable Banking
+  enableBankingAppId: ""
+  enableBankingPrivateKey: "" # Content of the PEM file
+
+  # OIDC
+  oidcClientId: ""
+  oidcClientSecret: ""
+
+  # OpenExchangeRates
+  openexchangeratesAppId: ""
+
+  # Agents (LLM). Signs the MCP server's JWTs. Empty derives it from secretKey,
+  # so the install needs no extra value. There is no default on purpose: a
+  # public one would let anyone mint a token for any user (#1174). A known
+  # public value is ignored and the derived key used instead.
+  agentsMcpJwtSecret: ""
+  agentsOpenaiApiKey: ""
+  agentsAnthropicApiKey: ""
+  agentsOpenaiCompatApiKey: ""
+
+# Non-sensitive configuration
+config:
+  debug: "false"
+  # Set false only when oidc.enabled, oidc.clientId, and oidc.discoveryUrl are configured.
+  localAuthEnabled: "true"
+  # Leave empty to auto-compute from global.domain (e.g. http://securo.local/oauth/callback)
+  pluggyOauthRedirectUri: ""
+  enableBankingApiUrl: "https://api.enablebanking.com"
+  # Leave empty to auto-compute from global.domain
+  enableBankingOauthRedirectUri: ""
+  simplefinEnabled: "false"
+  simplefinApiUrl: "https://beta-bridge.simplefin.org"
+  oidcEnabled: "false"
+  oidcProviderName: "OIDC"
+  oidcDiscoveryUrl: ""
+  oidcRedirectUri: ""
+  oidcScopes: "openid email profile"
+  oidcAutoRegister: "true"
+  # Link OIDC logins to existing accounts with the same email: disabled, verified_email, or email
+  oidcExistingUserLinkMode: "disabled"
+  oidcRequireVerifiedEmail: "true"
+  oidcSyncRoles: "false"
+  oidcRolesClaim: "groups"
+  oidcAdminRoles: ""
+  oidcWorkspaceRoleMap: ""
+  fxSyncMode: "on_demand"
+  tesouroDiretoEnabled: "true"
+
+  # Data plugins (categories and rules) from the plugin catalog. Opt-in; the
+  # catalog is fetched only when someone opens it.
+  pluginsEnabled: "false"
+  pluginsIndexUrl: "https://plugins.usesecuro.com/v1/index.json"
+
+  # Redis configuration
+  # If redis.enabled is true, the internal redis will be deployed.
+  # If redis.enabled is false, you must provide your external Redis URL here.
+  redisUrl: 'redis://{{ include "securo.fullname" . }}-redis-master:6379/0'
+  celeryBrokerUrl: 'redis://{{ include "securo.fullname" . }}-redis-master:6379/0'
+  celeryResultBackend: 'redis://{{ include "securo.fullname" . }}-redis-master:6379/0'
+
+  storageProvider: "local"
+  storageLocalPath: "/app/data/attachments"
+  storageS3Bucket: ""
+  storageS3Region: ""
+  storageS3EndpointUrl: ""
+  storageS3AllowInsecureHttp: "false" # development only; required for http:// endpoints
+  storageS3AddressingStyle: "auto" # use path for Garage/MinIO
+  agentsKnowledgeStoragePath: "/app/data/agent_knowledge"
+
+  # Agents feature
+  agentsEnabled: "false"
+  agentsBuiltinMcpUrl: 'http://{{ include "securo.fullname" . }}-mcp-server:8765/mcp'
+  # Public URL external MCP clients use, shown in the app. Empty lets the UI
+  # derive it from the browser (host:8765). Set it when you publish /mcp with
+  # mcpServer.publicRoute and reach it on the same domain.
+  agentsExternalMcpUrl: ""
+  agentsExtraMcpServers: ""
+  agentsMcpExternalTtlDays: "90"
+  agentsDefaultProvider: "ollama"
+  agentsDefaultModel: ""
+  agentsOllamaBaseUrl: "http://ollama:11434"
+  agentsOpenaiCompatBaseUrl: ""
+  agentsEmbeddingProvider: "native"
+  agentsEmbeddingModel: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+# Backend configuration
+backend:
+  replicaCount: 1
+  image:
+    repository: ghcr.io/securo-finance/securo-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# Frontend configuration
+frontend:
+  backendUrl: ""
+  replicaCount: 1
+  image:
+    repository: ghcr.io/securo-finance/securo-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Celery Worker configuration
+celeryWorker:
+  enabled: true
+  replicaCount: 1
+  image:
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# Celery Beat configuration
+celeryBeat:
+  enabled: true
+  image:
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Built-in MCP Server configuration
+mcpServer:
+  enabled: false
+  # Add /mcp to the Ingress (or HTTPRoute) so external MCP clients can reach
+  # it through the cluster's public entry point. Off by default: the server
+  # is only reachable inside the cluster, and publishing it is a deliberate
+  # choice that should sit behind your own gateway or network policy. When
+  # you turn it on, also set config.agentsExternalMcpUrl to the public URL.
+  publicRoute: false
+  replicaCount: 1
+  image:
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8765
+  resources:
+    limits:
+      cpu: 300m
+      memory: 256Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+# Persistence for application data
+# IMPORTANT: Since Backend, Celery Worker, and MCP Server all share the same attachment files,
+# they mount these PVCs concurrently. If your pods are scheduled across multiple nodes,
+# you MUST use a StorageClass that supports `ReadWriteMany` (RWX) access mode (e.g., NFS, CephFS).
+# `ReadWriteOnce` will only work if you restrict all pods to a single node.
+persistence:
+  attachments:
+    # Set false when using S3; migrate existing files before disabling this PVC.
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  # Both agent volumes are created only when config.agentsEnabled is true,
+  # so leaving these on costs a workspace that never enabled agents nothing,
+  # and a workspace that did keeps the volume it already has across upgrades.
+  agentKnowledge:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+  agentEmbeddingModels:
+    enabled: true
+    size: 5Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+# Standard Kubernetes Ingress
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  tls: []
+  #  - secretName: securo-tls
+  #    hosts:
+  #      - securo.local
+
+httpRoute:
+  enabled: false
+  parentRefs: []
+  # - name: external-gateway
+  #   namespace: gateway-system
+  # Path matches will route /api to backend and / to frontend.
+
+# Simple StatefulSet for PostgreSQL
+postgresql:
+  enabled: true
+  image:
+    repository: docker.io/pgvector/pgvector
+    tag: pg16
+    pullPolicy: IfNotPresent
+  resources: {}
+
+# Simple StatefulSet for Redis
+redis:
+  enabled: true
+  image:
+    repository: docker.io/library/redis
+    tag: 8-alpine
+    pullPolicy: IfNotPresent
+  # The official Redis image runs as uid 999 / gid 1000. Longhorn-provisioned
+  # volumes are initially owned by root, so fsGroup must be applied before the
+  # container starts or Redis cannot persist its RDB snapshots.
+  podSecurityContext:
+    fsGroup: 1000
+    fsGroupChangePolicy: OnRootMismatch
+  resources: {}
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80

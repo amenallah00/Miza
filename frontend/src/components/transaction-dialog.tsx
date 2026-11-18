@@ -1,0 +1,2153 @@
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { getAccountLabel, getAccountName, sortAccountsByDisplayName } from '@/lib/account-utils'
+import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
+import { useDateLocale, useDisplayLocale } from '@/hooks/use-display-locale'
+import { formatAmountInput, formatCurrency, parseAmountInput } from '@/lib/format'
+import { amountToCents, parseCents } from '@/lib/mortgage-split'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/contexts/auth-context'
+import { assets as assetsApi, currencies as currenciesApi, transactions as transactionsApi, settings as settingsApi, payees as payeesApi, rules as rulesApi, categories as categoriesApi, categoryGroups as categoryGroupsApi, mortgagePayments as mortgagePaymentsApi } from '@/lib/api'
+import { localDateString } from '@/lib/date-utils'
+import { invalidateFinancialQueries } from '@/lib/invalidate-queries'
+import { extractApiError } from '@/lib/api-errors'
+import { normalizeRuleMatchValue } from '@/lib/rule-match-utils'
+import { findCategoryReference, getRuleCategoryId } from '@/lib/category-reference-utils'
+import { flattenConditions, hasConditionGroups } from '@/lib/rule-conditions'
+import { cn, normalizeText } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { DescriptionInput } from '@/components/description-input'
+import { Label } from '@/components/ui/label'
+import { DatePickerInput } from '@/components/ui/date-picker-input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { AlertTriangle, ChevronDown, ChevronLeft, Download, Eye, EyeClosed, Paperclip, Upload, X, FileText, Plus, Unlink, SlidersHorizontal, ListPlus, Check } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { CategorySelect } from '@/components/category-select'
+import { PayeeSelect } from '@/components/payee-select'
+import { RuleDialog, type RuleDialogInitialData } from '@/components/rule-dialog'
+import { TransactionAttachments } from '@/components/transaction-attachments'
+import type { AttachmentPreview } from '@/components/transaction-attachments'
+import { TransactionSplitsSection } from '@/components/transaction-splits-section'
+import { buildInstallmentSeriesInput, hasNonStatusChange, isManualInstallmentSeriesRow } from '@/lib/installment-series'
+import { usePrivacyMode } from '@/hooks/use-privacy-mode'
+import type { Transaction, RecurringTransaction, TransactionSplitsInput, TransactionEditPayload, InstallmentSeriesInput, TransactionApplyScope, CategoryGroup, Category, CategoryLineShareType, Rule, RuleCondition, RuleConditionNode } from '@/types'
+import { TransactionCategoryLinesSection } from '@/components/transaction-category-lines-section'
+import {
+  buildLinesPayload,
+  checkLines,
+  emptyRow,
+  rowCents,
+  rowsFromLines,
+  type CategoryLineRow,
+} from '@/lib/category-lines'
+import { toast } from 'sonner'
+
+export type SaveAction = 'save' | 'saveAndNew' | 'saveAndDuplicate'
+
+export type TransactionSavePayload = TransactionEditPayload & {
+  apply_to?: TransactionApplyScope
+}
+
+type PendingInstallmentEdit = {
+  data: TransactionEditPayload
+  recurringData?: { frequency: string; end_date?: string }
+  installmentData?: InstallmentSeriesInput
+  pendingFiles?: File[]
+  action?: SaveAction
+}
+
+function isImageType(contentType: string): boolean {
+  return contentType.startsWith('image/')
+}
+
+function canExtendRuleFromTransaction(rule: Rule): boolean {
+  // Rules that mix AND and OR are left out: appending a top-level condition —
+  // and possibly flipping the rule to OR — would silently change what the
+  // grouped rule matches. Those are edited from the rules page instead.
+  if (hasConditionGroups(rule.conditions)) return false
+  return rule.is_active && !!getRuleCategoryId(rule) && (rule.conditions_op === 'or' || rule.conditions.length <= 1)
+}
+
+/** Appends a "description contains" condition for this transaction, unless the
+ * rule already has an equivalent one. Also flips a single-condition rule to OR
+ * so the new condition extends the match instead of narrowing it. */
+function buildExtendedRuleConditions(
+  rule: Rule,
+  description: string,
+): { conditions: RuleConditionNode[]; conditionsOp: 'and' | 'or'; isDuplicate: boolean } {
+  const newCondition: RuleCondition = { field: 'description', op: 'contains', value: description }
+  const isDuplicate = flattenConditions(rule.conditions).some(existing =>
+    existing.field === newCondition.field &&
+    existing.op === newCondition.op &&
+    normalizeRuleMatchValue(existing.value) === normalizeRuleMatchValue(newCondition.value)
+  )
+  return {
+    conditions: isDuplicate ? rule.conditions : [...rule.conditions, newCondition],
+    conditionsOp: rule.conditions.length <= 1 ? 'or' : rule.conditions_op,
+    isDuplicate,
+  }
+}
+
+export function TransactionDialog({
+  open,
+  onClose,
+  transaction,
+  categories,
+  categoryGroups,
+  accounts,
+  recurringMatch,
+  onSave,
+  onDelete,
+  onUnlinkTransfer,
+  onIgnoreChanged,
+  onCreateRule,
+  loading,
+  error,
+  isSynced = false,
+  duplicateDraft = null,
+  formResetKey = 0,
+  defaultAccountId,
+}: {
+  open: boolean
+  onClose: () => void
+  transaction: Transaction | null
+  categories: Category[]
+  categoryGroups: CategoryGroup[]
+  accounts: { id: string; name: string; display_name?: string | null; type?: string; currency?: string; secured_asset_id?: string | null }[]
+  recurringMatch?: RecurringTransaction
+  onSave: (data: TransactionSavePayload, recurringData?: { frequency: string; end_date?: string }, installmentData?: InstallmentSeriesInput, pendingFiles?: File[], action?: SaveAction) => void
+  onDelete?: () => void
+  onUnlinkTransfer?: (pairId: string) => void
+  onIgnoreChanged?: () => void
+  onCreateRule?: (tx: Transaction) => void
+  loading: boolean
+  error: string | null
+  isSynced?: boolean
+  duplicateDraft?: TransactionEditPayload | null
+  formResetKey?: number
+  /** Account preselected when creating a new transaction. */
+  defaultAccountId?: string
+}) {
+  const { t } = useTranslation()
+  const [preview, setPreview] = useState<AttachmentPreview | null>(null)
+  const [pendingInstallmentEdit, setPendingInstallmentEdit] =
+    useState<PendingInstallmentEdit | null>(null)
+
+  const handlePreviewChange = useCallback((newPreview: AttachmentPreview | null) => {
+    setPreview(newPreview)
+  }, [])
+
+  if (!open && preview) setPreview(null)
+  useEffect(() => () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url)
+  }, [preview])
+
+  const handleDownloadPreview = async () => {
+    if (!preview || !transaction) return
+    try {
+      const url = await transactionsApi.attachments.downloadUrl(transaction.id, preview.attachmentId)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = preview.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error(t('common.error'))
+    }
+  }
+
+  const isEditing = !!transaction
+  const hasPreview = isEditing && !!preview
+
+  const handleClose = () => {
+    setPendingInstallmentEdit(null)
+    onClose()
+  }
+
+  const handleSave = (
+    data: TransactionEditPayload,
+    recurringData?: { frequency: string; end_date?: string },
+    installmentData?: InstallmentSeriesInput,
+    pendingFiles?: File[],
+    action?: SaveAction,
+  ) => {
+    if (
+      transaction &&
+      isManualInstallmentSeriesRow(transaction) &&
+      hasNonStatusChange(data, transaction)
+    ) {
+      setPendingInstallmentEdit({ data, recurringData, installmentData, pendingFiles, action })
+      return
+    }
+    onSave(data, recurringData, installmentData, pendingFiles, action)
+  }
+
+  const submitInstallmentEdit = (scope: TransactionApplyScope) => {
+    if (!pendingInstallmentEdit) return
+    const { data, recurringData, installmentData, pendingFiles, action } = pendingInstallmentEdit
+    onSave({ ...data, apply_to: scope }, recurringData, installmentData, pendingFiles, action)
+    setPendingInstallmentEdit(null)
+  }
+
+  return (
+    <>
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className={cn(
+        // Bound the dialog to the viewport (dvh accounts for mobile browser
+        // chrome) and make it a flex column so the inner scroll region works
+        // on small screens, not just at the sm: breakpoint (issue #286).
+        'transition-[max-width] duration-300 flex flex-col max-h-[calc(100dvh-2rem)] overflow-hidden',
+        hasPreview ? 'sm:max-w-5xl max-w-2xl' : 'sm:max-w-2xl max-w-2xl'
+      )}>
+        <div className={isEditing
+          ? 'flex flex-col min-h-0 flex-1 sm:flex-row sm:flex-none sm:gap-0 sm:h-[80vh]'
+          : 'flex flex-col min-h-0 flex-1'}>
+          {/* Left column: form */}
+          <div className={isEditing
+            ? 'flex flex-col min-w-0 min-h-0 flex-1 overflow-hidden sm:pe-6'
+            : 'flex flex-col min-h-0 flex-1'}>
+            <DialogHeader className="mb-4">
+              <DialogTitle>
+                {transaction ? t('common.edit') : t('transactions.addManual')}
+              </DialogTitle>
+            </DialogHeader>
+            <TransactionForm
+              key={transaction?.id ?? `new-${formResetKey}`}
+              transaction={transaction}
+              duplicateDraft={duplicateDraft}
+              defaultAccountId={defaultAccountId}
+              categories={categories}
+              categoryGroups={categoryGroups}
+              accounts={accounts}
+              recurringMatch={recurringMatch}
+              onSave={handleSave}
+              onDelete={onDelete}
+              onUnlinkTransfer={onUnlinkTransfer}
+              onIgnoreChanged={onIgnoreChanged}
+              onCreateRule={onCreateRule}
+              onCancel={handleClose}
+              loading={loading}
+              error={error}
+              isSynced={isSynced}
+              onPreviewChange={handlePreviewChange}
+              activePreviewId={preview?.attachmentId ?? null}
+              hasPreview={hasPreview}
+            />
+          </div>
+
+          {/* Desktop: side panel */}
+          <div
+            className={cn(
+              'hidden sm:flex shrink-0 border-s flex-col overflow-hidden transition-[width] duration-300 ease-in-out',
+              hasPreview ? 'w-[420px]' : 'w-0 border-s-0'
+            )}
+          >
+            {preview && (
+              <>
+                <div className="flex-1 overflow-hidden">
+                  {preview.contentType === 'application/pdf' ? (
+                    <iframe
+                      src={`${preview.url}#toolbar=0&navpanes=0`}
+                      title={preview.filename}
+                      className="w-full h-full border-0 bg-white"
+                    />
+                  ) : isImageType(preview.contentType) ? (
+                    <div className="flex items-center justify-center h-full p-4 bg-muted/30">
+                      <img
+                        src={preview.url}
+                        alt={preview.filename}
+                        className="max-h-full max-w-full rounded object-contain"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2 px-4 py-3 border-t text-sm shrink-0">
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                    onClick={() => handlePreviewChange(null)}
+                    title={t('common.closePreview')}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="flex-1 truncate font-medium">{preview.filename}</span>
+                  <button
+                    type="button"
+                    className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                    onClick={handleDownloadPreview}
+                    title={t('common.download')}
+                  >
+                    <Download size={14} />
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile: full-screen overlay */}
+        {hasPreview && (
+          <div className="sm:hidden fixed inset-0 z-[100] bg-background flex flex-col animate-in slide-in-from-right rtl:slide-in-from-left duration-200">
+            <div className="flex-1 overflow-hidden">
+              {preview.contentType === 'application/pdf' ? (
+                <iframe
+                  src={`${preview.url}#toolbar=0&navpanes=0`}
+                  title={preview.filename}
+                  className="w-full h-full border-0 bg-white"
+                />
+              ) : isImageType(preview.contentType) ? (
+                <div className="flex items-center justify-center h-full p-4 bg-muted/30">
+                  <img
+                    src={preview.url}
+                    alt={preview.filename}
+                    className="max-h-full max-w-full rounded object-contain"
+                  />
+                </div>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2 px-4 py-3 border-t text-sm shrink-0">
+              <button
+                type="button"
+                className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={() => handlePreviewChange(null)}
+                title={t('common.closePreview')}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="flex-1 truncate font-medium">{preview.filename}</span>
+              <button
+                type="button"
+                className="p-1 rounded hover:bg-accent text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={handleDownloadPreview}
+                title={t('common.download')}
+              >
+                <Download size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+
+    <Dialog
+      open={!!pendingInstallmentEdit}
+      onOpenChange={(scopeOpen) => {
+        if (!scopeOpen) setPendingInstallmentEdit(null)
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t('transactions.installmentScopeTitle')}</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          {t('transactions.installmentScopeEditDesc')}
+        </p>
+        <DialogFooter className="flex-col sm:flex-row sm:justify-end gap-2">
+          <Button
+            autoFocus
+            onClick={() => submitInstallmentEdit('this')}
+            disabled={loading}
+            className="justify-center"
+          >
+            {loading ? t('common.loading') : t('transactions.installmentScopeThis')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => submitInstallmentEdit('future')}
+            disabled={loading}
+            className="justify-center"
+          >
+            {t('transactions.installmentScopeFuture')}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => submitInstallmentEdit('all')}
+            disabled={loading}
+            className="justify-center"
+          >
+            {t('transactions.installmentScopeAll')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
+  )
+}
+
+function TransactionForm({
+  transaction,
+  duplicateDraft,
+  defaultAccountId,
+  categories,
+  categoryGroups,
+  accounts,
+  recurringMatch,
+  onSave,
+  onDelete,
+  onUnlinkTransfer,
+  onIgnoreChanged,
+  onCreateRule,
+  onCancel,
+  loading,
+  error,
+  isSynced,
+  onPreviewChange,
+  activePreviewId,
+  hasPreview,
+}: {
+  transaction: Transaction | null
+  duplicateDraft: TransactionEditPayload | null
+  defaultAccountId?: string
+  categories: Category[]
+  categoryGroups: CategoryGroup[]
+  accounts: { id: string; name: string; display_name?: string | null; type?: string; currency?: string; secured_asset_id?: string | null }[]
+  recurringMatch?: RecurringTransaction
+  onSave: (data: TransactionEditPayload, recurringData?: { frequency: string; end_date?: string }, installmentData?: InstallmentSeriesInput, pendingFiles?: File[], action?: SaveAction) => void
+  onDelete?: () => void
+  onUnlinkTransfer?: (pairId: string) => void
+  onIgnoreChanged?: () => void
+  onCreateRule?: (tx: Transaction) => void
+  onCancel: () => void
+  loading: boolean
+  error: string | null
+  isSynced: boolean
+  onPreviewChange: (preview: AttachmentPreview | null) => void
+  activePreviewId: string | null
+  hasPreview: boolean
+}) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const { privacyMode, MASK } = usePrivacyMode()
+  const userCurrency = user?.preferences?.currency_display ?? 'USD'
+  const dateLocale = useDateLocale()
+  const displayLocale = useDisplayLocale()
+  const sortedAccounts = useMemo(() => sortAccountsByDisplayName(accounts), [accounts])
+  const { data: supportedCurrencies } = useQuery({
+    queryKey: ['currencies'],
+    queryFn: currenciesApi.list,
+    staleTime: Infinity,
+  })
+  const { data: payeesList } = useQuery({
+    queryKey: ['payees'],
+    queryFn: payeesApi.list,
+  })
+  const seed = transaction ?? duplicateDraft
+  const [description, setDescription] = useState(seed?.description ?? '')
+  // Amount fields hold display-locale strings (comma decimals on dot_comma),
+  // so seeds from stored numbers go through formatAmountInput — a raw
+  // toString() would read back through parseAmountInput with the dot taken
+  // for a thousands separator.
+  const [amount, setAmount] = useState(
+    seed?.amount != null ? formatAmountInput(seed.amount, displayLocale, 8) : ''
+  )
+  // A typed amount that doesn't read under the workspace format was rejected
+  // with a bare "Error" toast (issue #1072). Point at the field instead.
+  const parsedAmount = parseAmountInput(amount, displayLocale)
+  const amountInvalid = !isSynced && amount !== '' && parsedAmount == null
+  const [date, setDate] = useState(seed?.date ?? localDateString())
+  const [type, setType] = useState<'debit' | 'credit'>(seed?.type ?? 'debit')
+  const [status, setStatus] = useState<'posted' | 'pending'>(seed?.status ?? 'posted')
+  // Opened from an account page, start in that account's currency.
+  const [currency, setCurrency] = useState(
+    seed?.currency
+      ?? (defaultAccountId ? accounts.find(a => a.id === defaultAccountId)?.currency : undefined)
+      ?? userCurrency
+  )
+  const [categoryId, setCategoryId] = useState(seed?.category_id ?? '')
+  const [payeeId, setPayeeId] = useState(seed?.payee_id ?? '')
+  const [accountId, setAccountId] = useState(seed?.account_id ?? defaultAccountId ?? '')
+  const [notes, setNotes] = useState(seed?.notes ?? '')
+  // Manual CC bucketing override (issue #92). Empty = auto. Visible only
+  // when the selected account is a credit card.
+  const [effectiveBillDate, setEffectiveBillDate] = useState(seed?.effective_bill_date ?? '')
+  const [reportingDateOverride, setReportingDateOverride] = useState(
+    seed?.reporting_date_override ?? '',
+  )
+  const [convertedAmount, setConvertedAmount] = useState(
+    seed?.amount_primary != null ? formatAmountInput(seed.amount_primary, displayLocale, 8) : ''
+  )
+  const [fxRate, setFxRate] = useState(
+    seed?.fx_rate_used != null ? formatAmountInput(seed.fx_rate_used, displayLocale, 8) : ''
+  )
+  const [hadInitialFx] = useState(
+    !!transaction && (seed?.amount_primary != null || seed?.fx_rate_used != null)
+  )
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [frequency, setFrequency] = useState<RecurringTransaction['frequency']>('monthly')
+  const [endDate, setEndDate] = useState('')
+  // Manual installment series: when checked, the save handler
+  // builds an InstallmentSeriesInput payload that repeats the transaction
+  // as N parcels. Only count and frequency are asked for: each parcel uses
+  // the transaction's own amount and status.
+  const [isInstallment, setIsInstallment] = useState(false)
+  const [installmentCount, setInstallmentCount] = useState('2')
+  const [installmentFrequency, setInstallmentFrequency] = useState<RecurringTransaction['frequency']>('monthly')
+  // Optional split-with-group payload. `null` = leave splits as-is on
+  // update, or no splits on create. The dedicated section component
+  // owns its own UI state and surfaces a normalized payload here.
+  // Seeded from the transaction's existing splits so the edit dialog
+  // round-trips them rather than appearing empty.
+  const [splitsValid, setSplitsValid] = useState(true)
+  const [splits, setSplits] = useState<TransactionSplitsInput | null>(() => {
+    const existing = (seed as Transaction | null | undefined)?.splits
+    if (!existing || existing.length === 0) return null
+    return {
+      share_type: (existing[0].share_type as TransactionSplitsInput['share_type']) ?? 'equal',
+      splits: existing.map((s) => ({
+        group_member_id: s.group_member_id,
+        share_amount: s.share_amount,
+        share_pct: s.share_pct,
+      })),
+    }
+  })
+  // Captured once at mount so we know whether to send an explicit clear
+  // payload when the user toggles split off on a previously-split tx.
+  const [hadInitialSplits] = useState<boolean>(() => {
+    const existing = (seed as Transaction | null | undefined)?.splits
+    return !!(existing && existing.length > 0)
+  })
+  // Split across several categories (#425). `null` = one category (or none).
+  // Seeded from the transaction's lines, so editing round-trips them and
+  // duplicating a split row copies its parts.
+  const [lineRows, setLineRows] = useState<CategoryLineRow[] | null>(() => {
+    const source = seed as Transaction | null | undefined
+    if (!source?.has_category_lines || !source.category_lines?.length) return null
+    return rowsFromLines(source.category_lines, (v) => formatAmountInput(v, displayLocale))
+  })
+  const [lineShareType, setLineShareType] = useState<CategoryLineShareType>(
+    () => (seed as Transaction | null | undefined)?.category_lines?.[0]?.share_type ?? 'exact',
+  )
+  // Editing a row that was split: undoing it must be sent explicitly.
+  const [hadInitialLines] = useState<boolean>(
+    () => !!transaction?.has_category_lines && !!transaction.category_lines?.length,
+  )
+  const splitByCategory = lineRows !== null
+  // The parts as the dialog opened, to tell an edited split from a resend.
+  const initialLinesJson = useRef<string | null>(
+    lineRows ? JSON.stringify(buildLinesPayload(lineRows, lineShareType, displayLocale)) : null,
+  )
+  const isCreating = !transaction
+  const selectedAccount = accounts.find(a => a.id === accountId)
+  const isCreditCardSelected = selectedAccount?.type === 'credit_card'
+  const showReportingDateOverride =
+    isSynced && selectedAccount != null && !isCreditCardSelected
+  const showConversion = currency !== userCurrency && !isSynced
+  // Privacy mode hides monetary values across the app, but the edit modal
+  // surfaced the raw amount anyway (issue #323). Only existing transactions
+  // carry a value worth hiding — when creating, the user must see what they
+  // type. A reveal toggle keeps the field editable when needed.
+  const [revealAmounts, setRevealAmounts] = useState(false)
+  const canHideAmounts = privacyMode && !isCreating
+  const hideAmounts = canHideAmounts && !revealAmounts
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [pendingDragOver, setPendingDragOver] = useState(false)
+  const pendingFileInputRef = useRef<HTMLInputElement>(null)
+  const pendingActionRef = useRef<SaveAction>('save')
+  const formRef = useRef<HTMLFormElement>(null)
+  const descriptionRef = useRef<HTMLTextAreaElement>(null)
+
+  // Bank-synced descriptions can be long; auto-grow the textarea so the full
+  // text is always visible (issue #256).
+  useEffect(() => {
+    const el = descriptionRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    // border-box: add the border so scrollHeight content isn't clipped
+    const border = el.offsetHeight - el.clientHeight
+    el.style.height = `${el.scrollHeight + border}px`
+  }, [description, isSynced])
+  const [isIgnored, setIsIgnored] = useState(seed?.is_ignored ?? false)
+  const linesValid = !lineRows || checkLines(
+    lineRows, lineShareType, parseAmountInput(amount, displayLocale) ?? 0, displayLocale,
+  ).valid
+  // The backend refuses these anyway; hiding the action keeps the user from
+  // building a split that cannot be saved. A split among people and a split
+  // across categories are exclusive.
+  const canSplitByCategory =
+    !splits &&
+    !isIgnored &&
+    !transaction?.transfer_pair_id &&
+    !['settlement', 'opening_balance'].includes(seed?.source ?? '') &&
+    !seed?.external_id?.startsWith('bill_charge:')
+  const startCategorySplit = () => {
+    // The chosen category becomes the first part. Shares start empty, so the
+    // editor shows the whole amount as left to allocate. A recurring entry or
+    // an installment series carries the same parts to every occurrence.
+    const first = emptyRow()
+    first.categoryId = categoryId
+    setLineShareType('exact')
+    setLineRows([first, emptyRow()])
+    setCategoryId('')
+  }
+  const undoCategorySplit = () => {
+    // Same rule as the backend: the largest part's category stays.
+    let best: CategoryLineRow | null = null
+    for (const row of lineRows ?? []) {
+      if (!row.categoryId) continue
+      const value = lineShareType === 'exact'
+        ? rowCents(row.amount, displayLocale) ?? 0
+        : Number(row.percent.replace(',', '.')) || 0
+      const bestValue = !best ? -1 : lineShareType === 'exact'
+        ? rowCents(best.amount, displayLocale) ?? 0
+        : Number(best.percent.replace(',', '.')) || 0
+      if (value > bestValue) best = row
+    }
+    setCategoryId(best?.categoryId ?? '')
+    setLineRows(null)
+  }
+  const [excludeFromReports, setExcludeFromReports] = useState(
+    seed?.exclude_from_pnl ?? false,
+  )
+  const [togglingIgnore, setTogglingIgnore] = useState(false)
+  const [recurringLinked, setRecurringLinked] = useState(seed?.recurring_transaction_id != null)
+  const [unlinkingRecurring, setUnlinkingRecurring] = useState(false)
+  const [addToRuleOpen, setAddToRuleOpen] = useState(false)
+  const [extendRuleTarget, setExtendRuleTarget] = useState<Rule | null>(null)
+  // Unlinking re-reports the other leg, so the pair link is removed only
+  // after an explicit confirmation (issue #1160).
+  const [unlinkConfirmOpen, setUnlinkConfirmOpen] = useState(false)
+
+  const { data: rulesList, isLoading: rulesLoading } = useQuery({
+    queryKey: ['rules'],
+    queryFn: rulesApi.list,
+    enabled: !!transaction && !!onCreateRule,
+  })
+  // Hidden categories can still be the target of an existing rule; the picker's
+  // grouping and the rule editor's "current category" lookup both need them.
+  const { data: allCategoriesList } = useQuery({
+    queryKey: ['categories', 'management'],
+    queryFn: categoriesApi.listIncludingHidden,
+    enabled: !!transaction && !!onCreateRule,
+  })
+  const { data: allCategoryGroupsList } = useQuery({
+    queryKey: ['categoryGroups', 'management'],
+    queryFn: categoryGroupsApi.listIncludingHidden,
+    enabled: !!transaction && !!onCreateRule,
+  })
+  const displayCategories = allCategoriesList ?? categories
+  const displayCategoryGroups = allCategoryGroupsList ?? categoryGroups
+
+  // Counterpart leg of a transfer. Fetched lazily so only transfer dialogs
+  // pay for it — the list response carries just the shared pair id.
+  const { data: transferPair } = useQuery({
+    queryKey: ['transactions', transaction?.id, 'transfer-pair'],
+    queryFn: () => transactionsApi.transferPair(transaction!.id),
+    enabled: !!transaction?.id && !!transaction?.transfer_pair_id,
+  })
+  const extendableRules = useMemo(
+    () => (rulesList ?? []).filter(canExtendRuleFromTransaction),
+    [rulesList],
+  )
+
+  // Picking an existing rule opens the same rich editor used for creating a
+  // rule (RuleDialog), pre-filled with that rule's data plus the extra
+  // "description contains" condition — instead of a separate, cut-down form.
+  const extendRuleDialogProps = useMemo(() => {
+    if (!extendRuleTarget || !transaction) return null
+    const { conditions, conditionsOp } = buildExtendedRuleConditions(extendRuleTarget, transaction.description)
+    return {
+      rule: { ...extendRuleTarget, conditions_op: conditionsOp },
+      // The user is extending this rule specifically so it covers the
+      // transaction they're editing right now, so default to applying the
+      // rule's category to matching existing transactions (including this
+      // one) instead of leaving it stuck on its old category.
+      initialData: {
+        conditions,
+        applyToExisting: true,
+        overwriteExistingCategories: true,
+      } as RuleDialogInitialData,
+    }
+  }, [extendRuleTarget, transaction])
+
+  function handlePickRuleToExtend(rule: Rule) {
+    if (transaction && buildExtendedRuleConditions(rule, transaction.description).isDuplicate) {
+      toast.info(t('transactions.duplicateRuleCondition'))
+    }
+    setExtendRuleTarget(rule)
+    setAddToRuleOpen(false)
+  }
+
+  const updateRuleMutation = useMutation({
+    mutationFn: (data: Partial<Rule>) => rulesApi.update(extendRuleTarget!.id, data),
+    onSuccess: (updatedRule) => {
+      const targetCategoryId = getRuleCategoryId(updatedRule)
+      // Rules never overwrite a split, so the form keeps its parts too.
+      if (targetCategoryId && !splitByCategory) setCategoryId(targetCategoryId)
+      queryClient.invalidateQueries({ queryKey: ['rules'] })
+      const applied = updatedRule.applied_count ?? 0
+      if (applied > 0) {
+        invalidateFinancialQueries(queryClient)
+      }
+      setExtendRuleTarget(null)
+      toast.success(
+        applied > 0
+          ? t('rules.updatedAndApplied', { count: applied })
+          : t('transactions.addedToExistingRule'),
+      )
+    },
+    onError: () => {
+      toast.error(t('common.error'))
+    },
+  })
+
+  const handleToggleIgnore = async () => {
+    if (!seed?.id || togglingIgnore) return
+    setTogglingIgnore(true)
+    try {
+      const updated = await transactionsApi.toggleIgnore(seed.id)
+      setIsIgnored(updated.is_ignored)
+      toast.success(updated.is_ignored
+        ? t('transactions.ignoreSuccess')
+        : t('transactions.unignoreSuccess'))
+      onIgnoreChanged?.()
+    } catch {
+      toast.error(t('common.error'))
+    } finally {
+      setTogglingIgnore(false)
+    }
+  }
+
+  const handleUnlinkRecurring = async () => {
+    if (!seed?.id || unlinkingRecurring) return
+    setUnlinkingRecurring(true)
+    try {
+      await transactionsApi.unlinkRecurring(seed.id)
+      setRecurringLinked(false)
+      toast.success(t('transactions.recurringUnlinkSuccess'))
+      onIgnoreChanged?.()
+    } catch {
+      toast.error(t('common.error'))
+    } finally {
+      setUnlinkingRecurring(false)
+    }
+  }
+
+  const triggerSubmit = (action: SaveAction) => {
+    pendingActionRef.current = action
+    try {
+      // The submit handler runs synchronously inside requestSubmit() and reads
+      // the action first. If validation blocks the submit, the handler never
+      // runs, so reset here or a later plain Save would reuse this action.
+      formRef.current?.requestSubmit()
+    } finally {
+      pendingActionRef.current = 'save'
+    }
+  }
+  const showSaveVariants = isCreating && !isSynced
+
+  const { data: attachmentSettings } = useQuery({
+    queryKey: ['settings', 'attachments'],
+    queryFn: () => settingsApi.attachments(),
+    staleTime: 5 * 60 * 1000,
+    enabled: isCreating,
+  })
+  const allowedExtensions = useMemo(() => attachmentSettings?.allowed_extensions ?? ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'pdf'], [attachmentSettings?.allowed_extensions])
+  const maxFileSize = (attachmentSettings?.max_file_size_mb ?? 10) * 1024 * 1024
+  const maxAttachments = attachmentSettings?.max_attachments_per_transaction ?? 10
+
+  const addPendingFiles = useCallback((files: FileList | File[]) => {
+    const fileArray = Array.from(files)
+    setPendingFiles(prev => {
+      let current = prev.length
+      const next = [...prev]
+      for (const file of fileArray) {
+        if (current >= maxAttachments) {
+          toast.error(t('transactions.attachmentMaxReached'))
+          break
+        }
+        const ext = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : ''
+        if (!allowedExtensions.includes(ext)) {
+          toast.error(t('transactions.attachmentTypeNotAllowed'))
+          continue
+        }
+        if (file.size > maxFileSize) {
+          toast.error(t('transactions.attachmentTooLarge'))
+          continue
+        }
+        next.push(file)
+        current++
+      }
+      return next
+    })
+  }, [maxAttachments, allowedExtensions, maxFileSize, t])
+
+  const removePendingFile = (index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleConvertedAmountChange = (val: string) => {
+    setConvertedAmount(val)
+    const numVal = parseAmountInput(val, displayLocale)
+    const numAmount = parseAmountInput(amount, displayLocale)
+    // Zero is a valid converted amount; only the divisor must be non-zero.
+    if (numVal != null && numAmount) {
+      setFxRate(formatAmountInput(numVal / numAmount, displayLocale, 6))
+    } else if (!val) {
+      setFxRate('')
+    }
+  }
+
+  const handleFxRateChange = (val: string) => {
+    setFxRate(val)
+    const numRate = parseAmountInput(val, displayLocale)
+    const numAmount = parseAmountInput(amount, displayLocale)
+    if (numRate != null && numAmount != null) {
+      setConvertedAmount(formatAmountInput(numAmount * numRate, displayLocale))
+    } else if (!val) {
+      setConvertedAmount('')
+    }
+  }
+
+  const handleAmountChange = (val: string) => {
+    setAmount(val)
+    const numAmount = parseAmountInput(val, displayLocale)
+    const numRate = parseAmountInput(fxRate, displayLocale)
+    if (numRate != null && numAmount != null) {
+      setConvertedAmount(formatAmountInput(numAmount * numRate, displayLocale))
+    }
+  }
+
+  const handleCurrencyChange = (val: string) => {
+    setCurrency(val)
+    if (val === userCurrency) {
+      setConvertedAmount('')
+      setFxRate('')
+    }
+  }
+
+  return (
+    <form
+      ref={formRef}
+      onSubmit={(e) => {
+        e.preventDefault()
+        const action = pendingActionRef.current
+        pendingActionRef.current = 'save'
+        // Enter in a text field submits even while Save is disabled.
+        if (!splitsValid || !linesValid) return
+        // Amounts are typed under the display locale's separators (comma
+        // decimals on dot_comma), so they must be read back the same way —
+        // parseFloat would stop at the first comma and silently save the
+        // wrong value. An unreadable amount already shows under the field
+        // (`amountInvalid`), so it blocks the save without a toast.
+        if (!isSynced && parsedAmount == null) return
+        const fxFields: Partial<Transaction> = {}
+        const parsedConverted = parseAmountInput(convertedAmount, displayLocale)
+        const parsedFxRate = parseAmountInput(fxRate, displayLocale)
+        // A conversion field left empty is optional, but a non-empty one
+        // that doesn't parse must block the save like the amount does —
+        // silently dropping it would persist a transaction missing the
+        // conversion the user typed.
+        if (
+          showConversion &&
+          ((convertedAmount && parsedConverted == null) || (fxRate && parsedFxRate == null))
+        ) {
+          toast.error(t('common.error'))
+          return
+        }
+        if (showConversion && parsedConverted != null) {
+          fxFields.amount_primary = parsedConverted
+        }
+        if (showConversion && parsedFxRate != null) {
+          fxFields.fx_rate_used = parsedFxRate
+        }
+        if (showConversion && hadInitialFx && !convertedAmount && !fxRate) {
+          fxFields.amount_primary = null
+          fxFields.fx_rate_used = null
+        }
+        // Credit-card bill assignment and general period attribution are
+        // distinct controls. Synchronized non-card rows can move between
+        // report periods without changing their immutable bank date.
+        const overridePayload: Partial<Transaction> = isCreditCardSelected
+          ? { effective_bill_date: effectiveBillDate || null }
+          : showReportingDateOverride
+            ? { reporting_date_override: reportingDateOverride || null }
+            : {}
+        // Splits ride along on the same payload — the backend treats a
+        // missing `splits` field as untouched and a present payload as
+        // full replacement. To clear existing splits when the user
+        // toggles off, send an explicit empty payload.
+        const splitsPayload: { splits?: TransactionSplitsInput } = splits
+          ? { splits }
+          : hadInitialSplits
+            ? { splits: { share_type: 'equal', splits: [] } }
+            : {}
+        // Category parts follow the same rule as `splits`: absent keeps them,
+        // a list replaces them, an empty list undoes the split. While split,
+        // the row has no category of its own.
+        // Parts are sent only when they changed (or the amount did): an edit
+        // to "this and future" installments would otherwise copy this row's
+        // split over siblings that have their own.
+        const builtLines = lineRows ? buildLinesPayload(lineRows, lineShareType, displayLocale) : null
+        const linesEdited =
+          !hadInitialLines ||
+          JSON.stringify(builtLines) !== initialLinesJson.current ||
+          (transaction != null && parsedAmount != null && Number(transaction.amount) !== parsedAmount)
+        const categoryLinesPayload: Pick<TransactionEditPayload, 'category_lines' | 'category_id'> = builtLines
+          ? linesEdited
+            ? { category_lines: builtLines, category_id: null }
+            : { category_id: null }
+          : hadInitialLines
+            ? { category_lines: { share_type: 'exact', lines: [] } }
+            : {}
+        const pnlExclusionPayload = transaction
+          ? { exclude_from_pnl: excludeFromReports }
+          : {}
+        const txData = isSynced
+          ? {
+              ...(description !== transaction?.description ? { description } : {}),
+              category_id: categoryId || null,
+              payee_id: payeeId || null,
+              notes: notes.trim() || null,
+              is_ignored: isIgnored,
+              ...pnlExclusionPayload,
+              ...overridePayload,
+              ...splitsPayload,
+              ...categoryLinesPayload,
+            } as TransactionEditPayload
+          : {
+              description,
+              amount: parsedAmount ?? undefined,
+              date,
+              type,
+              currency,
+              category_id: categoryId || null,
+              payee_id: payeeId || null,
+              account_id: accountId || undefined,
+              notes: notes.trim() || null,
+              is_ignored: isIgnored,
+              ...pnlExclusionPayload,
+              // Creation defaults to "posted" server-side; the user can
+              // override to "pending" right in the form (date & status row).
+              status,
+              ...fxFields,
+              ...overridePayload,
+              ...splitsPayload,
+              ...categoryLinesPayload,
+            } as TransactionEditPayload
+        const recurringData = isCreating && isRecurring
+          ? { frequency, end_date: endDate || undefined }
+          : undefined
+        const installmentData = isCreating && isInstallment && !isSynced && parsedAmount != null
+          ? buildInstallmentSeriesInput({
+              accountId,
+              categoryId,
+              payeeId,
+              description,
+              amount: parsedAmount,
+              date,
+              type,
+              currency,
+              notes,
+              fxFields,
+              splits,
+              categoryLines: lineRows ? buildLinesPayload(lineRows, lineShareType, displayLocale) : null,
+              installmentCount,
+              installmentFrequency,
+              status,
+            })
+          : undefined
+        onSave(txData, recurringData, installmentData, isCreating && pendingFiles.length > 0 ? pendingFiles : undefined, action)
+      }}
+      className={cn(
+        // Always a bounded flex column; the DialogContent caps the overall
+        // height and this lets the body below scroll within it (issue #286).
+        'flex flex-col flex-1 min-h-0',
+        hasPreview && 'mt-4'
+      )}
+    >
+      <div className="space-y-4 overflow-y-auto flex-1 min-h-0 pb-2 sm:pe-3">
+      {error && (
+        <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md">
+          {error}
+        </div>
+      )}
+      {isSynced && (
+        <div className="flex items-center gap-2 p-3 text-sm bg-amber-50 border border-amber-200 rounded-md text-amber-700">
+          {t('transactions.syncedInfo')}
+        </div>
+      )}
+      {!!transaction?.transfer_pair_id && (
+        <div className="p-3 text-sm bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md text-blue-700 dark:text-blue-300 space-y-2">
+          <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
+            <div className="space-y-1 min-w-0 w-full sm:w-auto">
+              <p>{t('transactions.transferInfo')}</p>
+              {transferPair && (() => {
+                const pairAccount = accounts.find(a => a.id === transferPair.account_id)
+                const sign = transferPair.type === 'debit' ? '−' : '+'
+                return (
+                  <p className="text-xs text-blue-600 dark:text-blue-300 truncate">
+                    <span className="font-medium">{t('transactions.transferLinkedTo')}</span>{' '}
+                    {pairAccount ? (
+                      <Link
+                        to={`/accounts/${pairAccount.id}`}
+                        onClick={(e) => {
+                          // A modified click opens a new tab; keep the dialog and its edits.
+                          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+                          onCancel()
+                        }}
+                        title={t('transactions.transferOpenAccount', { account: getAccountName(pairAccount) })}
+                        className="underline underline-offset-2 hover:text-blue-800 dark:hover:text-blue-100"
+                      >
+                        {getAccountName(pairAccount)}
+                      </Link>
+                    ) : '—'}
+                    {' · '}
+                    {new Date(transferPair.date + 'T00:00:00').toLocaleDateString(dateLocale)}
+                    {' · '}
+                    <span dir="ltr">
+                      {sign}
+                      {formatCurrency(
+                        Math.abs(Number(transferPair.amount)),
+                        transferPair.currency ?? undefined,
+                        displayLocale,
+                      )}
+                    </span>
+                  </p>
+                )
+              })()}
+              <p className="text-xs text-blue-500 dark:text-blue-400">{t('transactions.transferTooltip')}</p>
+            </div>
+            {onUnlinkTransfer && transaction?.transfer_pair_id && (
+              <>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => setUnlinkConfirmOpen(true)}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-blue-200 dark:border-blue-800 bg-white/60 dark:bg-blue-900/40 px-2.5 py-1.5 text-xs font-medium text-blue-700 dark:text-blue-200 hover:bg-white dark:hover:bg-blue-900/70 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <Unlink size={12} />
+                  {t('transactions.unlinkTransfer')}
+                </button>
+                {/* Confirms the unlink: dropping the pair link re-reports the
+                    other leg, which changes reported totals (issue #1160). */}
+                <Dialog open={unlinkConfirmOpen} onOpenChange={setUnlinkConfirmOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>{t('transactions.unlinkTransfer')}</DialogTitle>
+                      <DialogDescription>
+                        {t('transactions.unlinkTransferConfirm')}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={() => setUnlinkConfirmOpen(false)}>
+                        {t('common.cancel')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          setUnlinkConfirmOpen(false)
+                          if (transaction?.transfer_pair_id) {
+                            onUnlinkTransfer(transaction.transfer_pair_id)
+                          }
+                        }}
+                      >
+                        {t('transactions.unlinkTransfer')}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {recurringMatch && (
+        <div className="flex items-center gap-2 p-3 text-sm bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-md">
+          <span>{t('transactions.recurringInfo', {
+            frequency: t(`recurring.${recurringMatch.frequency}`),
+            next: new Date(recurringMatch.next_occurrence + 'T00:00:00').toLocaleDateString(dateLocale),
+          })}</span>
+        </div>
+      )}
+      {recurringLinked && !isCreating && (
+        <div className="flex items-center justify-between gap-2 p-3 text-sm bg-muted/50 border border-border rounded-md">
+          <span className="text-muted-foreground">{t('transactions.recurringLinkedInfo')}</span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={handleUnlinkRecurring}
+            disabled={unlinkingRecurring}
+          >
+            <Unlink size={14} />
+            {t('transactions.recurringUnlinkAction')}
+          </Button>
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label>{t('transactions.description')}</Label>
+        {isSynced ? (
+          <textarea
+            ref={descriptionRef}
+            className="w-full border border-input rounded-md px-3 py-2 text-sm bg-card dark:bg-input/30 shadow-xs resize-none overflow-hidden outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            // Descriptions are single-line; Enter saves like the Input does.
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault()
+                formRef.current?.requestSubmit()
+              }
+            }}
+            required
+            rows={1}
+          />
+        ) : (
+          <DescriptionInput
+            value={description}
+            onChange={setDescription}
+            // Prefill what was last filed under this description, without
+            // overwriting anything the user already chose (issue #1127).
+            onPick={(suggestion) => {
+              if (!categoryId && !splitByCategory && suggestion.category_id) setCategoryId(suggestion.category_id)
+              if (!payeeId && suggestion.payee_id) setPayeeId(suggestion.payee_id)
+            }}
+            required
+            className="bg-card"
+          />
+        )}
+        {transaction?.original_description &&
+          transaction.original_description !== description && (
+            <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
+              <p>
+                {t('transactions.originalDescription')}: {transaction.original_description}
+              </p>
+              <button
+                type="button"
+                onClick={() => setDescription(transaction.original_description ?? '')}
+                className="shrink-0 underline underline-offset-2 hover:text-foreground transition-colors cursor-pointer"
+              >
+                {t('transactions.restoreOriginalDescription')}
+              </button>
+            </div>
+          )}
+        {/* Rows that pre-date the original_description column have no
+            provenance to show, so the raw payee stays the only hint at what
+            the bank actually sent. */}
+        {isSynced && transaction?.payee && transaction.payee !== transaction.description && (
+          <p className="text-xs text-muted-foreground">{transaction.payee}</p>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between min-h-5">
+            <Label>{t('transactions.amount')}</Label>
+            {canHideAmounts && (
+              <button
+                type="button"
+                onClick={() => setRevealAmounts((v) => !v)}
+                className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                title={revealAmounts ? t('privacy.hide') : t('privacy.show')}
+                aria-label={revealAmounts ? t('privacy.hide') : t('privacy.show')}
+              >
+                {revealAmounts ? <EyeClosed size={14} /> : <Eye size={14} />}
+              </button>
+            )}
+          </div>
+          {hideAmounts ? (
+            <Input
+              type="text"
+              value={MASK}
+              readOnly
+              tabIndex={-1}
+              className="bg-muted/40 text-muted-foreground cursor-default select-none"
+            />
+          ) : (
+            <>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => handleAmountChange(e.target.value)}
+                required
+                disabled={isSynced}
+                aria-invalid={amountInvalid}
+                aria-describedby={amountInvalid ? 'transaction-amount-error' : undefined}
+                className="bg-card"
+              />
+              {amountInvalid && (
+                <p id="transaction-amount-error" role="alert" className="text-xs text-destructive">
+                  {t('common.invalidAmount', { example: formatAmountInput(1234.56, displayLocale) })}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>{t('transactions.currency')}</Label>
+          <select
+            className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card h-9 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+            value={currency}
+            onChange={(e) => handleCurrencyChange(e.target.value)}
+            disabled={isSynced}
+          >
+            {(supportedCurrencies ?? [{ code: userCurrency, symbol: userCurrency, name: userCurrency, flag: '' }]).map((c) => (
+              <option key={c.code} value={c.code}>{c.flag} {c.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+        <div className="space-y-2">
+          <Label>{isSynced ? t('transactions.bankDate') : t('transactions.date')}</Label>
+          <DatePickerInput
+            value={date}
+            onChange={setDate}
+            disabled={isSynced}
+            className="w-full justify-start"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="transaction-status">{t('transactions.colStatus')}</Label>
+          <select
+            id="transaction-status"
+            className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card h-9 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as 'posted' | 'pending')}
+            disabled={isSynced}
+          >
+            <option value="posted">{t('transactions.statusPosted')}</option>
+            <option value="pending">{t('transactions.statusPending')}</option>
+          </select>
+        </div>
+      </div>
+      {showReportingDateOverride && (
+        <div className="space-y-2">
+          <Label>{t('transactions.reportingDate')}</Label>
+          <div className="flex items-center gap-1">
+            <DatePickerInput
+              value={reportingDateOverride}
+              onChange={setReportingDateOverride}
+              placeholder={t('transactions.reportingDatePlaceholder')}
+              className="w-full justify-start"
+            />
+            {reportingDateOverride && (
+              <button
+                type="button"
+                className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors shrink-0"
+                onClick={() => setReportingDateOverride('')}
+                title={t('transactions.clearReportingDate')}
+                aria-label={t('transactions.clearReportingDate')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {t('transactions.reportingDateHint')}
+          </p>
+        </div>
+      )}
+      {showConversion && (
+        <div className="border border-border rounded-md p-3 space-y-2">
+          {transaction?.fx_fallback && (
+            <div className="flex items-start gap-2 p-2 rounded-md bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <span className="text-xs">{t('transactions.fxFallbackBanner')}</span>
+            </div>
+          )}
+          <div>
+            <span className="text-sm font-medium">{t('transactions.conversion')}</span>
+            <span className="text-xs text-muted-foreground ms-2">({t('transactions.conversionHint')})</span>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <Label className="text-xs">{t('transactions.convertedAmount', { currency: userCurrency })}</Label>
+              {hideAmounts ? (
+                <Input
+                  type="text"
+                  value={MASK}
+                  readOnly
+                  tabIndex={-1}
+                  className="bg-muted/40 text-muted-foreground cursor-default select-none"
+                />
+              ) : (
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={convertedAmount}
+                  onChange={(e) => handleConvertedAmountChange(e.target.value)}
+                  placeholder={t('transactions.autoCalculated')}
+                  className="bg-card"
+                />
+              )}
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t('transactions.exchangeRate')}</Label>
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={fxRate}
+                onChange={(e) => handleFxRateChange(e.target.value)}
+                placeholder={t('transactions.autoCalculated')}
+                className="bg-card"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>{t('transactions.type')}</Label>
+          <select
+            className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+            value={type}
+            onChange={(e) => setType(e.target.value as 'debit' | 'credit')}
+            disabled={isSynced}
+          >
+            <option value="debit">{t('transactions.expense')}</option>
+            <option value="credit">{t('transactions.income')}</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between min-h-5">
+            <Label>{t('transactions.category')}</Label>
+            {canSplitByCategory && !splitByCategory && (
+              <button
+                type="button"
+                onClick={startCategorySplit}
+                className="text-xs text-primary hover:underline font-medium cursor-pointer"
+              >
+                {t('categoryLines.start')}
+              </button>
+            )}
+          </div>
+          {splitByCategory ? (
+            <div className="h-9 flex items-center px-3 rounded-md border border-dashed border-violet-300 dark:border-violet-800 text-sm text-violet-700 dark:text-violet-300">
+              {t('categoryLines.badge', { count: lineRows.length })}
+            </div>
+          ) : (
+            <CategorySelect
+              value={categoryId}
+              onChange={setCategoryId}
+              categories={displayCategories}
+              groups={displayCategoryGroups}
+              currentCategory={seed?.category}
+              allowNone={true}
+              creatable
+              className="bg-card"
+            />
+          )}
+        </div>
+      </div>
+      {splitByCategory && (
+        <TransactionCategoryLinesSection
+          amount={parseAmountInput(amount, displayLocale) ?? 0}
+          currency={currency}
+          rows={lineRows}
+          shareType={lineShareType}
+          onChange={(rows, shareType) => {
+            setLineRows(rows)
+            setLineShareType(shareType)
+          }}
+          onUndo={undoCategorySplit}
+          categories={displayCategories}
+          groups={displayCategoryGroups}
+          hideAmounts={hideAmounts}
+        />
+      )}
+      <div className={cn("grid gap-4", isSynced ? "grid-cols-1" : "grid-cols-2")}>
+        <div className="space-y-2">
+          <Label>{t('payees.payee')}</Label>
+          <PayeeSelect
+            value={payeeId}
+            onChange={setPayeeId}
+            payees={payeesList ?? []}
+            creatable
+          />
+          {isSynced && transaction?.payee && (
+            <p className="text-xs text-muted-foreground">{t('payees.rawPayee')}: {transaction.payee}</p>
+          )}
+        </div>
+        {!isSynced && (
+          <div className="space-y-2">
+            <Label>{t('transactions.account')}</Label>
+            <select
+              className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              required
+            >
+              {!accountId && <option value="" disabled hidden>{t('transactions.createCounterpartSelectAccount')}</option>}
+              {sortedAccounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>{getAccountLabel(acc)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label>{t('transactions.notes')} <span className="text-muted-foreground font-normal text-xs">({t('transactions.notesHint')})</span></Label>
+        <textarea
+          className="w-full border border-input rounded-md px-3 py-2 text-sm bg-card resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-0"
+          rows={2}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder={t('transactions.notesPlaceholder')}
+        />
+      </div>
+
+      {transaction && (
+        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+            checked={excludeFromReports}
+            onChange={(event) => setExcludeFromReports(event.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium">
+              {t('transactions.excludeFromReports')}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {t('transactions.excludeFromReportsHint')}
+            </span>
+          </span>
+        </label>
+      )}
+
+      {/* Manual bill-cycle override (issue #92). CC accounts only. Empty
+          input = use auto bucketing (Pluggy bill_id when available, cycle
+          math otherwise). Setting the date forces this tx into the bill
+          whose due_date matches. */}
+      {isCreditCardSelected && (
+          <div className="space-y-2">
+            <Label>
+              {t('transactions.effectiveBillDate', 'Effective bill date')}{' '}
+              <span className="text-muted-foreground font-normal text-xs">
+                ({t('transactions.effectiveBillDateHint', 'manual, overrides the automatic cycle')})
+              </span>
+            </Label>
+            <div className="inline-flex items-center gap-1">
+              <DatePickerInput
+                value={effectiveBillDate}
+                onChange={setEffectiveBillDate}
+                placeholder={t('transactions.effectiveBillDatePlaceholder', 'Bill due date (optional)')}
+              />
+              {effectiveBillDate && (
+                <button
+                  type="button"
+                  className="h-9 w-9 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
+                  onClick={() => setEffectiveBillDate('')}
+                  title={t('transactions.clearOverride', 'Remover sobrescrição')}
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+      )}
+
+      {/* A settlement-sourced transaction *is* the movement clearing a
+          group debt; splitting it would create circular accounting
+          (the share would settle a debt that this debit is already
+          settling). Hide the section entirely in that case. */}
+      {transaction?.source !== 'settlement' && !splitByCategory && (
+        <TransactionSplitsSection
+          amount={parseAmountInput(amount, displayLocale) ?? 0}
+          currency={currency}
+          value={splits}
+          onChange={setSplits}
+          onValidityChange={setSplitsValid}
+        />
+      )}
+
+      {!isCreating && !splitByCategory && !transaction?.has_category_lines && transaction?.type === 'debit' && transaction.status === 'posted' && !transaction.is_ignored && !transaction.transfer_pair_id && !transaction.category?.is_ignored && Number(transaction.amount) > 0 && accounts.find(a => a.id === transaction.account_id)?.type !== 'loan' && accounts.some(a => a.type === 'loan' && a.secured_asset_id) && (
+        <MortgagePaymentEditor transaction={transaction} accounts={accounts} />
+      )}
+
+      {!isCreating && transaction ? (
+        <TransactionAttachments
+          transactionId={transaction.id}
+          onPreviewChange={onPreviewChange}
+          activePreviewId={activePreviewId}
+        />
+      ) : isCreating && (
+        <PendingAttachmentsSection
+          files={pendingFiles}
+          dragOver={pendingDragOver}
+          maxAttachments={maxAttachments}
+          allowedExtensions={allowedExtensions}
+          fileInputRef={pendingFileInputRef}
+          onDragOver={() => setPendingDragOver(true)}
+          onDragLeave={() => setPendingDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setPendingDragOver(false); if (e.dataTransfer.files?.length) addPendingFiles(e.dataTransfer.files) }}
+          onFileChange={(e) => { if (e.target.files?.length) { addPendingFiles(e.target.files); e.target.value = '' } }}
+          onRemove={removePendingFile}
+        />
+      )}
+
+      {/* Create options — recurring and installment toggles share one row
+          when creating non-synced transactions. "Repeat as installments"
+          mirrors the transaction N times for debits and receivables. */}
+      {isCreating && !isSynced && (
+        <div className="space-y-3 border rounded-md p-3">
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isRecurring}
+                onChange={(e) => {
+                  setIsRecurring(e.target.checked)
+                  if (e.target.checked) setIsInstallment(false)
+                }}
+                className="rounded border-gray-300"
+              />
+              <span className="text-sm font-medium">{t('transactions.makeRecurring')}</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isInstallment}
+                onChange={(e) => {
+                  setIsInstallment(e.target.checked)
+                  if (e.target.checked) setIsRecurring(false)
+                }}
+                className="rounded border-gray-300"
+              />
+              <span className="text-sm font-medium">{t('transactions.makeInstallment')}</span>
+            </label>
+          </div>
+          {isRecurring && (
+            <div className="grid grid-cols-2 gap-4 pt-1">
+              <div className="space-y-2">
+                <Label>{t('recurring.frequency')}</Label>
+                <select
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+                  value={frequency}
+                  onChange={(e) => setFrequency(e.target.value as RecurringTransaction['frequency'])}
+                >
+                  <option value="monthly">{t('recurring.monthly')}</option>
+                  <option value="quarterly">{t('recurring.quarterly')}</option>
+                  <option value="semiannual">{t('recurring.semiannual')}</option>
+                  <option value="weekly">{t('recurring.weekly')}</option>
+                  <option value="biweekly">{t('recurring.biweekly')}</option>
+                  <option value="yearly">{t('recurring.yearly')}</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('recurring.endDate')}</Label>
+                <DatePickerInput
+                  value={endDate}
+                  onChange={setEndDate}
+                  placeholder={t('recurring.endDate')}
+                  className="w-full justify-start"
+                />
+              </div>
+            </div>
+          )}
+          {isInstallment && (
+            <div className="grid grid-cols-2 gap-4 pt-1">
+              <div className="space-y-2">
+                <Label>{t('transactions.installmentFrequency')}</Label>
+                <select
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+                  value={installmentFrequency}
+                  onChange={(e) => setInstallmentFrequency(e.target.value as RecurringTransaction['frequency'])}
+                >
+                  <option value="monthly">{t('recurring.monthly')}</option>
+                  <option value="quarterly">{t('recurring.quarterly')}</option>
+                  <option value="semiannual">{t('recurring.semiannual')}</option>
+                  <option value="weekly">{t('recurring.weekly')}</option>
+                  <option value="biweekly">{t('recurring.biweekly')}</option>
+                  <option value="yearly">{t('recurring.yearly')}</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('transactions.installmentCount')}</Label>
+                <input
+                  type="number"
+                  min={2}
+                  max={360}
+                  className="w-full border border-border rounded-md px-3 py-2 text-sm bg-card focus:outline-none focus-visible:ring-ring/30 focus-visible:ring-[2px]"
+                  value={installmentCount}
+                  onChange={(e) => setInstallmentCount(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      </div>
+
+      <DialogFooter className={cn(
+        'shrink-0 border-t pt-4 mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between',
+        !(onDelete || seed?.id) ? 'sm:justify-end' : ''
+      )}>
+        <div className="flex min-w-0 flex-wrap gap-2 items-center">
+          {onDelete && (
+            <Button type="button" variant="destructive" onClick={onDelete} disabled={loading} className="whitespace-nowrap text-xs sm:text-sm h-8 sm:h-9">
+              {t('common.delete')}
+            </Button>
+          )}
+          {seed?.id && (
+            <Button
+              type="button"
+              variant={isIgnored ? 'secondary' : 'outline'}
+              onClick={handleToggleIgnore}
+              disabled={loading || togglingIgnore}
+              title={t('transactions.ignoreTransferHint')}
+              className="gap-1.5 whitespace-nowrap text-xs sm:text-sm h-8 sm:h-9"
+            >
+              {isIgnored ? <Eye size={14} /> : <EyeClosed size={14} />}
+              {isIgnored ? t('transactions.unignoreAction') : t('transactions.ignoreAction')}
+            </Button>
+          )}
+          {transaction && onCreateRule && (
+            <div className="inline-flex">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onCreateRule(transaction)}
+                className="gap-1.5 rounded-e-none whitespace-nowrap text-xs sm:text-sm h-8 sm:h-9"
+                title={t('transactions.createRule')}
+              >
+                <SlidersHorizontal size={14} />
+                {t('transactions.createRule')}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    aria-label={t('transactions.ruleActions')}
+                    className="rounded-s-none border-s-0 px-1.5 sm:px-2 has-[>svg]:px-1.5 sm:has-[>svg]:px-2 h-8 sm:h-9"
+                    disabled={updateRuleMutation.isPending}
+                  >
+                    <ChevronDown size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  <DropdownMenuItem onSelect={() => setAddToRuleOpen(true)}>
+                    <ListPlus size={16} />
+                    {t('transactions.addToExistingRule')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2 justify-end sm:ms-auto">
+          <Button type="button" variant="outline" onClick={onCancel} className="whitespace-nowrap text-xs sm:text-sm h-8 sm:h-9">
+            {t('common.cancel')}
+          </Button>
+          {showSaveVariants ? (
+            <div className="inline-flex">
+              <Button
+                type="submit"
+                disabled={loading || !splitsValid || !linesValid}
+                className="rounded-e-none whitespace-nowrap text-xs sm:text-sm h-8 sm:h-9"
+              >
+                {loading ? t('common.loading') : t('common.save')}
+              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    disabled={loading || !splitsValid || !linesValid}
+                    aria-label={t('transactions.moreSaveOptions')}
+                    className="rounded-s-none border-s border-s-primary-foreground/20 px-1.5 sm:px-2 has-[>svg]:px-1.5 sm:has-[>svg]:px-2 h-8 sm:h-9"
+                  >
+                    <ChevronDown size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => triggerSubmit('saveAndNew')}>
+                    {t('transactions.saveAndNew')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => triggerSubmit('saveAndDuplicate')}>
+                    {t('transactions.saveAndDuplicate')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          ) : (
+            <Button type="submit" disabled={loading || !splitsValid || !linesValid} className="whitespace-nowrap text-xs sm:text-sm h-8 sm:h-9">
+              {loading ? t('common.loading') : t('common.save')}
+            </Button>
+          )}
+        </div>
+      </DialogFooter>
+      {transaction && addToRuleOpen && (
+        <AddTransactionToRuleDialog
+          open={true}
+          onOpenChange={setAddToRuleOpen}
+          rules={extendableRules}
+          categories={displayCategories}
+          categoryGroups={displayCategoryGroups}
+          loadingRules={rulesLoading}
+          onSubmit={handlePickRuleToExtend}
+        />
+      )}
+      {extendRuleDialogProps && (
+        <RuleDialog
+          open={true}
+          onClose={() => setExtendRuleTarget(null)}
+          rule={extendRuleDialogProps.rule}
+          categories={categories}
+          categoryGroups={categoryGroups}
+          currentCategories={displayCategories}
+          accounts={sortedAccounts}
+          payees={payeesList ?? []}
+          onSave={(data) => updateRuleMutation.mutate(data)}
+          loading={updateRuleMutation.isPending}
+          initialData={extendRuleDialogProps.initialData}
+        />
+      )}
+    </form>
+  )
+}
+
+function MortgagePaymentEditor({
+  transaction,
+  accounts,
+}: {
+  transaction: Transaction
+  accounts: { id: string; name: string; display_name?: string | null; type?: string; currency?: string; secured_asset_id?: string | null }[]
+}) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const loans = useMemo(
+    () => accounts.filter(account => account.type === 'loan' && account.secured_asset_id && account.currency === transaction.currency),
+    [accounts, transaction.currency],
+  )
+  const account = accounts.find(item => item.id === transaction.account_id)
+  const { data } = useQuery({
+    queryKey: ['mortgage-payment', transaction.id],
+    queryFn: () => mortgagePaymentsApi.get(transaction.id),
+  })
+  const [draftAmounts, setDraftAmounts] = useState<Record<string, { principal: string; interest: string }> | null>(null)
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null)
+  const isExpanded = expandedOverride ?? !!data?.allocations.length
+  const amounts = draftAmounts ?? Object.fromEntries((data?.allocations ?? []).map(row => [row.loan_account_id, {
+    principal: String(row.principal_amount), interest: String(row.interest_amount),
+  }]))
+  const { data: propertyAssets } = useQuery({
+    queryKey: ['assets'],
+    queryFn: () => assetsApi.list(),
+  })
+  const refreshMortgageData = async () => {
+    invalidateFinancialQueries(queryClient)
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['mortgage-payment', transaction.id] }),
+      queryClient.invalidateQueries({ queryKey: ['accounts'] }),
+      queryClient.invalidateQueries({ queryKey: ['mortgage-balance-history'] }),
+      queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['reports'] }),
+    ])
+  }
+  const save = useMutation({
+    mutationFn: () => mortgagePaymentsApi.replace(transaction.id, loans
+      .filter(item => amounts[item.id])
+      .map(item => ({
+        loan_account_id: item.id,
+        principal_amount: (parseCents(amounts[item.id].principal) ?? 0) / 100,
+        interest_amount: (parseCents(amounts[item.id].interest) ?? 0) / 100,
+      }))),
+    onSuccess: async () => {
+      await refreshMortgageData()
+      toast.success(t('transactions.mortgageSaved'))
+    },
+    onError: (error) => toast.error(extractApiError(error, t('transactions.mortgageSaveError'))),
+  })
+  const remove = useMutation({
+    mutationFn: () => mortgagePaymentsApi.remove(transaction.id),
+    onSuccess: async () => {
+      setDraftAmounts(null)
+      await refreshMortgageData()
+      toast.success(t('transactions.mortgageRemoved'))
+    },
+    onError: (error) => toast.error(extractApiError(error, t('transactions.mortgageSaveError'))),
+  })
+  if (account?.type === 'loan' || loans.length === 0) return null
+  // Compare whole cents: the backend requires two decimals and an exact total.
+  const parts = loans.flatMap(item => {
+    const value = amounts[item.id]
+    return value ? [parseCents(value.principal), parseCents(value.interest)] : []
+  })
+  const partsValid = parts.every(cents => cents !== null)
+  const totalCents = parts.reduce<number>((sum, cents) => sum + (cents ?? 0), 0)
+  const total = totalCents / 100
+  // Share of the payment, not of the parts entered so far: the label says
+  // "payment split", and while the parts are still short of the payment a
+  // denominator of their own sum reads as 100% of a payment half allocated.
+  const paymentAmount = Number(transaction.amount)
+  const percentage = (value: string, totalAmount: number) => totalAmount ? (Number(value || 0) / totalAmount * 100).toFixed(1) : '0.0'
+  return (
+    <section className="rounded-lg border border-border p-3 space-y-3">
+      <button type="button" className="w-full text-start text-sm font-medium" onClick={() => setExpandedOverride(!isExpanded)}>
+        {t('transactions.mortgageAllocation')}
+        {data?.allocations.length ? ' · ' + data.allocations.length : ''}
+      </button>
+      {isExpanded && <>
+      <p className="text-xs text-muted-foreground">{t('transactions.mortgageCurrencyHint', { currency: transaction.currency })}</p>
+      {loans.map(loan => {
+        const value = amounts[loan.id] ?? { principal: '', interest: '' }
+        const propertyName = propertyAssets?.find(asset => asset.id === loan.secured_asset_id)?.name
+        return (
+          <div key={loan.id} className="rounded-md bg-muted/40 p-3 space-y-2">
+            <div className="text-sm font-medium">{loan.display_name || loan.name}{propertyName ? <span className="ms-1 text-xs font-normal text-muted-foreground">· {propertyName}</span> : null}</div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="text-xs text-muted-foreground">{t('transactions.mortgagePrincipal')}
+              <Input type="number" min="0" step="0.01" value={value.principal} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }} onChange={e => setDraftAmounts(prev => ({ ...(prev ?? amounts), [loan.id]: { ...value, principal: e.target.value } }))} />
+              </label>
+              <label className="text-xs text-muted-foreground">{t('transactions.mortgageInterest')}
+              <Input type="number" min="0" step="0.01" value={value.interest} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }} onChange={e => setDraftAmounts(prev => ({ ...(prev ?? amounts), [loan.id]: { ...value, interest: e.target.value } }))} />
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground">{t('transactions.mortgageSplitPercentages', { principal: percentage(value.principal, paymentAmount), interest: percentage(value.interest, paymentAmount) })}</p>
+          </div>
+        )
+      })}
+      <p className="text-xs text-muted-foreground">{t('transactions.mortgagePaymentTotal', { total: total.toFixed(2), payment: Number(transaction.amount).toFixed(2), currency: transaction.currency })}</p>
+      <Button type="button" size="sm" variant="outline" disabled={save.isPending || !partsValid || totalCents <= 0 || totalCents !== amountToCents(Number(transaction.amount))} onClick={() => save.mutate()}>
+        {save.isPending ? t('common.saving') : t('transactions.saveMortgageAllocation')}
+      </Button>
+      {data?.allocations.length ? <Button type="button" size="sm" variant="ghost" disabled={remove.isPending} onClick={() => remove.mutate()}>{t('transactions.removeMortgageAllocation')}</Button> : null}
+      {data?.allocations.length ? <p className="text-xs text-muted-foreground">{t('transactions.mortgageSavedSummary', { principal: data.principal_total.toFixed(2), interest: data.interest_total.toFixed(2), currency: data.currency, principalPercentage: data.principal_percentage.toFixed(1), interestPercentage: data.interest_percentage.toFixed(1) })}</p> : null}
+      {data?.allocations.some(row => row.historical) && <p className="text-xs text-muted-foreground">{t('transactions.mortgageHistoricalNote')}</p>}
+      {data?.allocations.some(row => row.bank_managed) && <p className="text-xs text-muted-foreground">{t('transactions.mortgageBankManagedNote')}</p>}
+      </>}
+    </section>
+  )
+}
+
+function AddTransactionToRuleDialog({
+  open,
+  onOpenChange,
+  rules,
+  categories: displayCategories,
+  categoryGroups: displayCategoryGroups,
+  loadingRules,
+  onSubmit,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  rules: Rule[]
+  categories: Category[]
+  categoryGroups: CategoryGroup[]
+  loadingRules: boolean
+  onSubmit: (rule: Rule) => void
+}) {
+  const { t } = useTranslation()
+  const [ruleId, setRuleId] = useState('')
+  const [openCombobox, setOpenCombobox] = useState(false)
+
+  const effectiveRuleId = ruleId && rules.some(rule => rule.id === ruleId)
+    ? ruleId
+    : rules[0]?.id ?? ''
+  const selectedRule = rules.find(rule => rule.id === effectiveRuleId) ?? null
+
+  const groupedRules = useMemo(() => {
+    const groupsMap: { [categoryId: string]: { categoryName: string; rules: Rule[] } } = {}
+
+    for (const rule of rules) {
+      const categoryId = getRuleCategoryId(rule) ?? 'uncategorized'
+      let categoryName = t('transactions.uncategorized')
+
+      if (categoryId !== 'uncategorized') {
+        const category = findCategoryReference(displayCategories, categoryId)
+        if (category) {
+          categoryName = category.name
+          if (category.group_id) {
+            const group = displayCategoryGroups.find(g => g.id === category.group_id)
+            if (group) {
+              categoryName = `${group.name} > ${category.name}`
+            }
+          }
+        } else {
+          categoryName = t('transactions.category')
+        }
+      }
+
+      if (!groupsMap[categoryId]) {
+        groupsMap[categoryId] = {
+          categoryName,
+          rules: [],
+        }
+      }
+      groupsMap[categoryId].rules.push(rule)
+    }
+
+    return Object.entries(groupsMap).map(([categoryId, data]) => ({
+      categoryId,
+      ...data,
+    }))
+  }, [rules, displayCategories, displayCategoryGroups, t])
+
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    // This dialog renders inside the transaction's <form>; without stopping
+    // propagation the submit event bubbles up the React tree (portals preserve
+    // it) and also triggers the parent transaction save.
+    event.stopPropagation()
+    if (!selectedRule) return
+    onSubmit(selectedRule)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('transactions.addToExistingRuleTitle')}</DialogTitle>
+          <DialogDescription>
+            {t('transactions.addToExistingRuleDescription')}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label>{t('transactions.existingRule')}</Label>
+            <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  disabled={loadingRules || rules.length === 0}
+                  className="flex w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 py-2 text-sm text-start shadow-xs transition-[color,box-shadow] outline-hidden focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50 h-9 cursor-pointer"
+                >
+                  <span className="flex-1 truncate text-start">
+                    {loadingRules ? (
+                      t('common.loading')
+                    ) : selectedRule ? (
+                      selectedRule.name
+                    ) : (
+                      t('transactions.noExistingRules')
+                    )}
+                  </span>
+                  <ChevronDown className="size-4 shrink-0 opacity-50" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[var(--radix-popover-trigger-width)] p-0 overflow-hidden"
+              >
+                <Command
+                  filter={(itemValue, search) => {
+                    return normalizeText(itemValue).includes(normalizeText(search)) ? 1 : 0
+                  }}
+                >
+                  <CommandInput placeholder={t('transactions.searchRule', 'Search rule...')} />
+                  <CommandList className="max-h-[300px] overflow-y-auto">
+                    <CommandEmpty>{t('transactions.noRulesFound', 'No rules found.')}</CommandEmpty>
+                    {groupedRules.map((group) => (
+                      <CommandGroup key={group.categoryId}>
+                        <div className="px-2 py-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-muted-foreground/70">
+                          {group.categoryName}
+                        </div>
+                        {group.rules.map((rule) => (
+                          <CommandItem
+                            key={rule.id}
+                            value={`${group.categoryName} ${rule.name}`}
+                            onSelect={() => {
+                              setRuleId(rule.id)
+                              setOpenCombobox(false)
+                            }}
+                            className="flex items-center justify-between gap-2 cursor-pointer"
+                          >
+                            <span className="flex-1 truncate">{rule.name}</span>
+                            {effectiveRuleId === rule.id && <Check className="size-4 shrink-0" />}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    ))}
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
+            {!loadingRules && rules.length === 0 && (
+              <p className="text-xs text-muted-foreground">{t('transactions.noExistingRules')}</p>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button type="submit" disabled={!selectedRule}>
+              {t('transactions.assignRule')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function PendingAttachmentsSection({
+  files,
+  dragOver,
+  maxAttachments,
+  allowedExtensions,
+  fileInputRef,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onFileChange,
+  onRemove,
+}: {
+  files: File[]
+  dragOver: boolean
+  maxAttachments: number
+  allowedExtensions: string[]
+  fileInputRef: React.RefObject<HTMLInputElement | null>
+  onDragOver: () => void
+  onDragLeave: () => void
+  onDrop: (e: React.DragEvent) => void
+  onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  onRemove: (index: number) => void
+}) {
+  const { t } = useTranslation()
+  const hasFiles = files.length > 0
+  const atMax = files.length >= maxAttachments
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <Paperclip size={14} />
+        {t('transactions.attachments')}
+        {hasFiles && (
+          <span className="text-xs text-muted-foreground font-normal">({files.length})</span>
+        )}
+      </div>
+
+      {hasFiles ? (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {files.map((file, index) => {
+              const isImg = file.type.startsWith('image/')
+              const isPdf = file.type === 'application/pdf'
+              const ext = file.name.includes('.') ? file.name.split('.').pop()!.toUpperCase() : 'FILE'
+
+              return (
+                <div
+                  key={`${file.name}-${index}`}
+                  className="group relative rounded-xl overflow-hidden ring-1 ring-border hover:ring-border/80 hover:shadow-md hover:shadow-black/5"
+                >
+                  <div className="aspect-square bg-muted/50 flex items-center justify-center overflow-hidden relative">
+                    {isImg ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-full h-full object-cover"
+                        onLoad={(e) => URL.revokeObjectURL((e.target as HTMLImageElement).src)}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className={`w-12 h-14 rounded-lg flex items-center justify-center ${
+                          isPdf ? 'bg-red-500/10' : 'bg-muted'
+                        }`}>
+                          <FileText size={24} className={isPdf ? 'text-red-500' : 'text-muted-foreground'} />
+                        </div>
+                        <span className="text-[10px] font-semibold tracking-widest text-muted-foreground/70 uppercase">
+                          {ext}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Remove button */}
+                  <div className="absolute start-0 end-0 bottom-[44px] flex items-center justify-center gap-1 px-2 py-1.5 opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200">
+                    <div className="flex items-center gap-1 bg-background/90 dark:bg-card/90 backdrop-blur-sm rounded-lg ring-1 ring-border/50 shadow-lg shadow-black/10 px-1 py-0.5">
+                      <button
+                        type="button"
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
+                        onClick={() => onRemove(index)}
+                        title={t('common.delete')}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="px-3 py-2.5 bg-card">
+                    <p className="text-[12px] font-medium truncate leading-tight" title={file.name}>
+                      {file.name}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                      {formatFileSize(file.size)}
+                    </p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {!atMax && (
+            <button
+              type="button"
+              className={`w-full mt-2 rounded-lg border-2 border-dashed py-3 flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 ${
+                dragOver
+                  ? 'border-primary bg-primary/5'
+                  : 'border-border hover:border-muted-foreground/40 hover:bg-muted/30'
+              }`}
+              onDragOver={(e) => { e.preventDefault(); onDragOver() }}
+              onDragLeave={onDragLeave}
+              onDrop={onDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Plus size={14} className="text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>
+            </button>
+          )}
+        </>
+      ) : (
+        <div
+          className={`rounded-xl border-2 border-dashed py-6 px-4 text-center transition-all cursor-pointer ${
+            dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
+          }`}
+          onDragOver={(e) => { e.preventDefault(); onDragOver() }}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <div className="flex flex-col items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+              <Upload size={14} className="text-muted-foreground" />
+            </div>
+            <span className="text-xs text-muted-foreground">{t('transactions.attachmentsUpload')}</span>
+          </div>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept={allowedExtensions.map(ext => `.${ext}`).join(',')}
+        onChange={onFileChange}
+        className="hidden"
+      />
+    </div>
+  )
+}

@@ -1,0 +1,85 @@
+from celery import Celery
+
+from app.core.config import get_settings
+from app.core.feature_flags import feature_flag
+
+settings = get_settings()
+
+celery_app = Celery(
+    "securo",
+    broker=settings.redis_url,
+    backend=settings.redis_url,
+)
+
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+)
+
+celery_app.conf.beat_schedule = {
+    "sync-all-connections-hourly": {
+        "task": "app.tasks.sync_tasks.sync_all_connections",
+        "schedule": 60 * 60,  # hourly; task applies BANK_SYNC_MIN_INTERVAL_HOURS
+    },
+    "generate-recurring-daily": {
+        "task": "app.tasks.recurring_tasks.generate_all_recurring",
+        "schedule": 60 * 60,  # every hour; generate_pending is idempotent (advances next_occurrence)
+    },
+    "generate-recurring-invoices-daily": {
+        "task": "app.tasks.invoice_schedule_tasks.generate_recurring_invoices",
+        # Hourly, like recurring transactions: a period is emitted the
+        # first run after its date, and the cursor plus the unique
+        # (schedule, sequence) make every later run a no-op.
+        "schedule": 60 * 60,
+    },
+    "apply-asset-growth-daily": {
+        "task": "app.tasks.asset_tasks.apply_asset_growth_rules",
+        "schedule": 60 * 60,  # every hour; idempotent (checks last value date)
+    },
+    "refresh-market-prices-daily": {
+        "task": "app.tasks.asset_tasks.refresh_market_prices",
+        # Once a day is enough for personal portfolio tracking — keeps us
+        # well under Yahoo's unofficial per-IP caps and avoids the bot
+        # heuristics that trip on a chatty schedule. Task upserts today's
+        # AssetValue so history stays at one row per day per asset.
+        "schedule": 60 * 60 * 24,
+    },
+    "sync-fx-rates-daily": {
+        "task": "app.tasks.fx_rate_tasks.sync_fx_rates",
+        "schedule": 60 * 60 * 12,  # twice daily (~60 API calls/month)
+    },
+    "restamp-recurring-fx-daily": {
+        "task": "app.tasks.fx_rate_tasks.restamp_recurring_fx",
+        "schedule": 60 * 60 * 12,  # twice daily, after FX rate sync
+    },
+    "restamp-fallback-fx-daily": {
+        "task": "app.tasks.fx_rate_tasks.restamp_fallback_fx",
+        # Twice daily, after FX rate sync — heals transactions that were
+        # stamped with the 1:1 fallback (or left NULL) once real rates land.
+        "schedule": 60 * 60 * 12,
+    },
+}
+
+if feature_flag("PLUGINS_ENABLED"):
+    # Only scheduled when plugins are on, so an instance without them runs
+    # nothing extra. Each connection keeps its own interval (at least 15
+    # minutes, from the plugin's manifest); this only checks which are due.
+    celery_app.conf.beat_schedule["sync-plugin-connections"] = {
+        "task": "app.tasks.plugin_tasks.sync_plugin_connections",
+        "schedule": 60 * 5,
+    }
+
+celery_app.conf.include = [
+    "app.tasks.sync_tasks",
+    "app.tasks.recurring_tasks",
+    "app.tasks.invoice_schedule_tasks",
+    "app.tasks.asset_tasks",
+    "app.tasks.fx_rate_tasks",
+    "app.tasks.plugin_tasks",
+    # Optional agents module — registering the import is harmless when
+    # AGENTS_ENABLED=false (the task just won't be dispatched).
+    "app.agents.tasks.ingest",
+]
